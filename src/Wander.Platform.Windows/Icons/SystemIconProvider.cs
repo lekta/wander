@@ -101,6 +101,11 @@ public sealed class SystemIconProvider : IIconProvider {
         ".exe", ".ico", ".cur", ".ani", ".scr", ".cpl", ".url", ".website", ".appref-ms",
     };
 
+    /// <summary>The looks a folder's picture can be cached under besides the plain one (<see cref="FolderLook.KeySuffix"/>).</summary>
+    private static readonly string[] _folderLooks = {
+        new FolderLook(Grid: true).KeySuffix,
+    };
+
     /// <summary>
     /// PDFs whose first page came out blank in this process (see
     /// <see cref="RenderCoverPlate"/>). Their tile falls back to the
@@ -150,6 +155,10 @@ public sealed class SystemIconProvider : IIconProvider {
     /// the smaller sizes are keyed by extension and cost nothing to rebuild.
     /// </summary>
     private readonly ThumbnailDiskCache? _disk;
+
+    /// <summary>Folders drawn from their files' pictures at the two thumbnail steps - see <see cref="FolderPictures"/>.</summary>
+    private readonly FolderPictures _folders;
+
     private int _memoryBudget = MaxCachedThumbnails;
 
     // Pixels of a Large thumbnail - ThumbnailCacheOptions.ThumbnailSide.
@@ -158,10 +167,11 @@ public sealed class SystemIconProvider : IIconProvider {
 
     public SystemIconProvider(ThumbnailDiskCache? disk = null) {
         _disk = disk;
+        _folders = new FolderPictures((file, size) => GetIcon(file, size), KeepsPicture, disk);
     }
 
 
-    public byte[]? GetIcon(string path, IconSize size) {
+    public byte[]? GetIcon(string path, IconSize size, FolderLook look = default) {
         if (string.IsNullOrEmpty(path)) {
             return null;
         }
@@ -170,7 +180,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // answer costs a shell call, and both the cache key and the icon
         // itself depend on it.
         bool isFolder = DevicePath.Is(path) ? IsDeviceFolder(path) : System.IO.Directory.Exists(path) || IsArchiveFolder(path);
-        var (key, perPath) = BuildCacheKey(path, size, isFolder);
+        var (key, perPath) = BuildCacheKey(path, size, isFolder, look);
 
         lock (_lock) {
             if (_cache.TryGetValue(key, out byte[]? cached)) {
@@ -178,6 +188,31 @@ public sealed class SystemIconProvider : IIconProvider {
             }
             if (_missing.Contains(key)) {
                 return null;
+            }
+        }
+
+        // A file's picture asked for on a network or removable drive: its
+        // folder counts as opened from now on, and drops the shell's
+        // picture it had, to be drawn from its files next time it is shown.
+        // A folder being drawn asks this for its own files - opened already.
+        if (size is IconSize.Medium or IconSize.Large && !isFolder && _folders.NoteShown(path) is { } opened) {
+            ForgetCached(opened);
+        }
+
+        if (isFolder && size is IconSize.Medium or IconSize.Large) {
+            byte[]? own;
+            try {
+                using (PerfLog.Measure("bg.folder")) {
+                    own = _folders.Render(path, size, look, size == IconSize.Large ? _thumbSide : MediumSize);
+                }
+            } catch {
+                // Drawn by the shell then, as before Wander drew folders.
+                own = null;
+            }
+            if (own is not null) {
+                Remember(key, own, perPath, path);
+
+                return own;
             }
         }
 
@@ -231,15 +266,7 @@ public sealed class SystemIconProvider : IIconProvider {
                 }
             } else {
                 Remember(key, bytes, perPath, path);
-                // The type's icon drawn for want of a Store extension stays
-                // off the disk: the extension installed, it would go on
-                // being found there. A RAW is drawn from its own JPEG,
-                // extension or not. A shortcut is drawn from its target,
-                // so the target's codec decides (review 2026-10-15). The
-                // stand-in for a PDF page that came out blank stays off it
-                // too: the next process draws the page.
-                string drawn = ExistingLinkTarget(path) ?? path;
-                if (cacheable && (ImageFormats.IsRaw(drawn) || !LacksCodec(drawn)) && !_blankPages.ContainsKey(drawn)) {
+                if (cacheable && KeepsPicture(path)) {
                     using (PerfLog.Measure("bg.thumb-disk-write")) {
                         _disk!.Write(path, bytes);
                     }
@@ -349,17 +376,17 @@ public sealed class SystemIconProvider : IIconProvider {
     /// caller that does not know is answered from per-path keys only.
     /// </para>
     /// </summary>
-    public byte[]? TryGetCachedIcon(string path, IconSize size, bool? isFolder = null) {
+    public byte[]? TryGetCachedIcon(string path, IconSize size, bool? isFolder = null, FolderLook look = default) {
         if (string.IsNullOrEmpty(path)) {
             return null;
         }
 
         lock (_lock) {
             if (IsShellNamespacePath(path)) {
-                return _cache.GetValueOrDefault(BuildCacheKey(path, size, isFolder: false).Key);
+                return _cache.GetValueOrDefault(BuildCacheKey(path, size, isFolder: false, look).Key);
             }
 
-            if (isFolder != false && _cache.TryGetValue($"dir|{path}|{size}", out byte[]? asFolder)) {
+            if (isFolder != false && _cache.TryGetValue(FolderKey(path, size, look), out byte[]? asFolder)) {
                 return asFolder;
             }
             if (isFolder == true) {
@@ -425,14 +452,27 @@ public sealed class SystemIconProvider : IIconProvider {
 
     /// <summary>
     /// The file as it is on disk right now, or the unknown stamp when there
-    /// is no file behind the path — a shell sentinel, an entry inside an
-    /// archive, something deleted between the load and this call.
+    /// is nothing on disk behind the path — a shell sentinel, an entry inside
+    /// an archive, something deleted between the load and this call.
+    ///
+    /// <para>
+    /// A folder is stamped too, by its last-write time and no length - the
+    /// reading its listing row carries. Its picture shows what it holds
+    /// (<see cref="FolderPictures"/>), and a file added, removed or renamed in it moves that
+    /// time; without a stamp a folder drawn empty stayed empty for the
+    /// session once files were copied into it (2026-11-06).
+    /// </para>
     /// </summary>
     private static FileStamp ReadStamp(string path) {
         try {
             var info = new FileInfo(path);
+            if (info.Exists) {
+                return FileStamp.Of(info.LastWriteTimeUtc, info.Length);
+            }
 
-            return info.Exists ? FileStamp.Of(info.LastWriteTimeUtc, info.Length) : default;
+            var folder = new DirectoryInfo(path);
+
+            return folder.Exists ? FileStamp.Of(folder.LastWriteTimeUtc, null) : default;
         } catch {
             return default;
         }
@@ -479,7 +519,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// to this one file (a thumbnail) or is shared by every file of its type
     /// (an icon). The second half is what the memory budget is counted on.
     /// </summary>
-    private static (string Key, bool PerPath) BuildCacheKey(string path, IconSize size, bool isFolder) {
+    private static (string Key, bool PerPath) BuildCacheKey(string path, IconSize size, bool isFolder, FolderLook look) {
         // Shell-namespace sentinels (shell:RecycleBinFolder, …) have no real
         // filesystem behind them; key by the full URI lowered so different
         // sentinels stay distinct but caching still works.
@@ -491,10 +531,33 @@ public sealed class SystemIconProvider : IIconProvider {
         // "look under both keys" probe finds a folder inside an archive
         // without being told anything new.
         if (isFolder) {
-            return ($"dir|{path}|{size}", true);
+            return (FolderKey(path, size, look), true);
         }
 
         return BuildFileCacheKey(path, size);
+    }
+
+    /// <summary>
+    /// A folder's key: its path and size, and at the two thumbnail steps the
+    /// look - the gallery's face and the cascade are two pictures of one
+    /// folder.
+    /// </summary>
+    private static string FolderKey(string path, IconSize size, FolderLook look) {
+        return size is IconSize.Medium or IconSize.Large ? $"dir|{path}|{size}{look.KeySuffix}" : $"dir|{path}|{size}";
+    }
+
+    /// <summary>
+    /// Whether this picture of a file is the one it keeps, worth the disk:
+    /// not the type's icon drawn for want of a Store extension - installed,
+    /// it would go on being found there. A RAW is drawn from its own JPEG,
+    /// extension or not; a shortcut from its target, so the target's codec
+    /// decides (review 2026-10-15). Nor the stand-in for a PDF page that
+    /// came out blank: the next process draws the page.
+    /// </summary>
+    private static bool KeepsPicture(string path) {
+        string drawn = ExistingLinkTarget(path) ?? path;
+
+        return (ImageFormats.IsRaw(drawn) || !LacksCodec(drawn)) && !_blankPages.ContainsKey(drawn);
     }
 
     /// <summary>
@@ -599,6 +662,11 @@ public sealed class SystemIconProvider : IIconProvider {
     private static IEnumerable<string> KeysFor(string path, IconSize size) {
         yield return $"shell|{path.ToLowerInvariant()}|{size}";
         yield return $"dir|{path}|{size}";
+        if (size is IconSize.Medium or IconSize.Large) {
+            foreach (string look in _folderLooks) {
+                yield return $"dir|{path}|{size}{look}";
+            }
+        }
         yield return $"lnk|{path}|{size}";
         yield return $"own|{path}|{size}";
         yield return $"book|{path}|{size}";

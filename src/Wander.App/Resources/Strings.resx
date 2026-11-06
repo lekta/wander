@@ -373,6 +373,16 @@
   <data name="ColumnModified" xml:space="preserve">
     <value>Изменён</value>
   </data>
+  <data name="ColumnInside" xml:space="preserve">
+    <value>Внутри</value>
+    <comment>Столбец подтверждения удаления: сколько файлов и папок в папке</comment>
+  </data>
+  <data name="DeleteTagCompanion" xml:space="preserve">
+    <value>спутник</value>
+  </data>
+  <data name="DeleteTagReadOnly" xml:space="preserve">
+    <value>только чтение</value>
+  </data>
   <data name="ActionCopy" xml:space="preserve">
     <value>Копировать</value>
   </data>
@@ -666,47 +676,55 @@
     <value>Отправить в корзину?</value>
   </data>
   <data name="ConfirmDeleteOne" xml:space="preserve">
-    <value>Удалить безвозвратно {0} «{1}»?
-
-{2}</value>
+    <value>Удалить безвозвратно {0} «{1}»?</value>
   </data>
   <data name="ConfirmRecycleOne" xml:space="preserve">
-    <value>Отправить в корзину {0} «{1}»?
-
-{2}</value>
+    <value>Отправить в корзину {0} «{1}»?</value>
   </data>
   <data name="ConfirmDeleteMany" xml:space="preserve">
-    <value>Удалить безвозвратно {0}?
-
-{1}</value>
+    <value>Удалить безвозвратно {0}?</value>
   </data>
   <data name="ConfirmRecycleMany" xml:space="preserve">
-    <value>Отправить в корзину {0}?
-
-{1}</value>
-  </data>
-  <data name="ConfirmWithCompanions" xml:space="preserve">
-    <value>Вместе с ними уедут файлы-спутники: {0}.</value>
+    <value>Отправить в корзину {0}?</value>
   </data>
   <data name="ConfirmIrreversible" xml:space="preserve">
     <value>Это действие нельзя отменить.</value>
   </data>
-  <data name="ConfirmReadOnlyTitle" xml:space="preserve">
-    <value>Только для чтения</value>
+  <data name="ConfirmDeleteTotal" xml:space="preserve">
+    <value>Всего: {0}</value>
   </data>
-  <data name="ConfirmReadOnlyOne" xml:space="preserve">
-    <value>Элемент помечен «только для чтения»:
-
-{0}
-
-Всё равно удалить?</value>
+  <data name="ConfirmDeleteTotalCounting" xml:space="preserve">
+    <value>Всего: {0} — считается</value>
   </data>
-  <data name="ConfirmReadOnlyMany" xml:space="preserve">
-    <value>Эти элементы помечены «только для чтения»:
-
-{0}
-
-Всё равно удалить все?</value>
+  <data name="ConfirmDeleteInside" xml:space="preserve">
+    <value>Внутри: {0}</value>
+  </data>
+  <data name="ConfirmDeleteCounting" xml:space="preserve">
+    <value>считается</value>
+  </data>
+  <data name="ConfirmDeleteEmpty" xml:space="preserve">
+    <value>пусто</value>
+  </data>
+  <data name="ConfirmDeleteUnreadable" xml:space="preserve">
+    <value>нет доступа</value>
+  </data>
+  <data name="ConfirmDeleteAmount" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>Сколько и сколько весит: «2 файла, 1 папка · 42 MB»</comment>
+  </data>
+  <data name="ConfirmDeleteFilesAndFolders" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="MenuCaptionFileCount" xml:space="preserve">
+    <value>{0:N0} файл|{0:N0} файла|{0:N0} файлов</value>
+    <comment>Счёт в подтверждении удаления — с разрядами («1 284 файла»)</comment>
+  </data>
+  <data name="MenuCaptionFolderCount" xml:space="preserve">
+    <value>{0:N0} папка|{0:N0} папки|{0:N0} папок</value>
+  </data>
+  <data name="ConfirmDeleteReadOnly" xml:space="preserve">
+    <value>Только для чтения: {0} — пометка снимется, удалятся вместе с остальными.</value>
+    <comment>{0} — сколько из удаляемых помечены «только для чтения»</comment>
   </data>
   <data name="CannotPasteTitle" xml:space="preserve">
     <value>Нельзя вставить</value>
@@ -826,6 +844,12 @@
   </data>
   <data name="ActionRetry" xml:space="preserve">
     <value>Повторить</value>
+  </data>
+  <data name="ActionRecycle" xml:space="preserve">
+    <value>В корзину</value>
+  </data>
+  <data name="ActionDelete" xml:space="preserve">
+    <value>Удалить</value>
   </data>
   <data name="ActionDeleteForGood" xml:space="preserve">
     <value>Удалить безвозвратно</value>
@@ -1040,18 +1064,17 @@
   <data name="RecycleUnavailableTitle" xml:space="preserve">
     <value>Не помещается в корзину</value>
   </data>
-  <data name="RecycleUnavailableIntro" xml:space="preserve">
-    <value>Корзина не принимает — не удалено:</value>
+  <data name="RecycleUnavailableOne" xml:space="preserve">
+    <value>Корзина не принимает {0} «{1}»</value>
   </data>
-  <data name="RecycleUnavailableItem" xml:space="preserve">
-    <value>• {0} — {1}</value>
-    <comment>{0} — имя, {1} — папка, где лежит</comment>
+  <data name="RecycleUnavailableMany" xml:space="preserve">
+    <value>Корзина не принимает {0}</value>
   </data>
   <data name="RecycleUnavailableTooLong" xml:space="preserve">
-    <value>Причина: путь длиннее 259 знаков — у самого элемента или у файла внутри папки.</value>
+    <value>Путь длиннее 259 знаков — у самого элемента или у файла внутри папки.</value>
   </data>
   <data name="RecycleUnavailableNoBin" xml:space="preserve">
-    <value>Причина: у диска нет корзины.</value>
+    <value>У этого диска нет корзины.</value>
   </data>
   <data name="RecycleUnavailableRestRecycled" xml:space="preserve">
     <value>Остальные {0} — уже в корзине.</value>

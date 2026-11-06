@@ -204,6 +204,15 @@ public static partial class Strings {
     /// <summary>Изменён</summary>
     public static string ColumnModified => Get(nameof(ColumnModified));
 
+    /// <summary>Внутри</summary>
+    public static string ColumnInside => Get(nameof(ColumnInside));
+
+    /// <summary>спутник</summary>
+    public static string DeleteTagCompanion => Get(nameof(DeleteTagCompanion));
+
+    /// <summary>только чтение</summary>
+    public static string DeleteTagReadOnly => Get(nameof(DeleteTagReadOnly));
+
     /// <summary>Копировать</summary>
     public static string ActionCopy => Get(nameof(ActionCopy));
 
@@ -215,6 +224,12 @@ public static partial class Strings {
 
     /// <summary>Повторить</summary>
     public static string ActionRetry => Get(nameof(ActionRetry));
+
+    /// <summary>В корзину</summary>
+    public static string ActionRecycle => Get(nameof(ActionRecycle));
+
+    /// <summary>Удалить</summary>
+    public static string ActionDelete => Get(nameof(ActionDelete));
 
     /// <summary>Удалить безвозвратно</summary>
     public static string ActionDeleteForGood => Get(nameof(ActionDeleteForGood));

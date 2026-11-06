@@ -45,4 +45,25 @@ public class DesktopIniTests {
         Assert.True(DesktopIni.SaysPictures(Encoding.ASCII.GetBytes(text)));
         Assert.False(DesktopIni.SaysPictures(Array.Empty<byte>()));
     }
+
+
+    /// <summary>PLAN F1, decision 2026-11-06: a folder somebody gave an icon keeps the shell's picture.</summary>
+    [Theory]
+    [InlineData("[.ShellClassInfo]\r\nIconResource=C:\\Windows\\System32\\imageres.dll,-3\r\n")]
+    [InlineData("[.ShellClassInfo]\r\nIconFile=folder.ico\r\nIconIndex=0\r\n")]
+    [InlineData("; by Explorer\r\n[ .ShellClassInfo ]\r\n  iconresource = %SystemRoot%\\system32\\shell32.dll,4  \r\n")]
+    public void AnIconOfItsOwn_IsSaid(string text) {
+        Assert.True(DesktopIni.SetsIcon(text));
+        Assert.True(DesktopIni.SetsIcon(Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(text)).ToArray()));
+    }
+
+    /// <summary>A localised name alone, or the keys outside their section, give the folder no icon: it is drawn as any other.</summary>
+    [Theory]
+    [InlineData("[.ShellClassInfo]\r\nLocalizedResourceName=@%SystemRoot%\\system32\\shell32.dll,-21770\r\n")]
+    [InlineData("[ViewState]\r\nIconResource=C:\\x.dll,1\r\n")]
+    [InlineData("[.ShellClassInfo]\r\nIconResource=\r\n")]
+    [InlineData("")]
+    public void NoIconOfItsOwn_IsNotSaid(string text) {
+        Assert.False(DesktopIni.SetsIcon(text));
+    }
 }

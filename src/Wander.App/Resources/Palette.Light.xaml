@@ -202,6 +202,16 @@
     <SolidColorBrush x:Key="StatusWarningGlyph" Color="#9D5D00"/>
     <SolidColorBrush x:Key="StatusErrorGlyph" Color="#C42B1C"/>
 
+    <!--
+        A line of a question that must not be missed - why the bin refused,
+        the read-only items of a delete: the same two colours as a tint
+        behind the text (Windows 11's caution and critical bars).
+    -->
+    <SolidColorBrush x:Key="PlaqueWarningBackground" Color="#FFF4CE"/>
+    <SolidColorBrush x:Key="PlaqueWarningBorder" Color="#E5C07B"/>
+    <SolidColorBrush x:Key="PlaqueErrorBackground" Color="#FDE7E9"/>
+    <SolidColorBrush x:Key="PlaqueErrorBorder" Color="#F1BBBF"/>
+
     <!-- The "..." button that appears on a bookmark row under the cursor. -->
     <SolidColorBrush x:Key="RowActionHover" Color="#C4E0F4"/>
 

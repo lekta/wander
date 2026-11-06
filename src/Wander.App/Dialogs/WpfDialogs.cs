@@ -1,5 +1,6 @@
 using System.Windows;
 using Wander.App.Conflict;
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 
 namespace Wander.App.Dialogs;
@@ -38,6 +39,10 @@ public sealed class WpfDialogs : IDialogs {
 
     public int Choose(ChoiceRequest request) {
         return ChoiceDialog.Show(request, ActiveWindow());
+    }
+
+    public bool ConfirmDelete(DeleteConfirmation question) {
+        return DeleteConfirmWindow.Show(question, ActiveWindow());
     }
 
     public string? Prompt(string title, string label, string initial, bool filenameMode) {

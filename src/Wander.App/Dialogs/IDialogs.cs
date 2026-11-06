@@ -1,3 +1,4 @@
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 
 namespace Wander.App.Dialogs;
@@ -6,7 +7,6 @@ namespace Wander.App.Dialogs;
 public enum DialogKind {
     RecycleConfirm,
     PermanentDeleteConfirm,
-    ReadOnlyConfirm,
     MoveConfirm,
     CreateSidecar,
     CannotPaste,
@@ -28,7 +28,7 @@ public enum DialogKind {
     /// <summary>A delete failed because another program holds the file: try again?</summary>
     DeleteInUse,
 
-    /// <summary>The recycle bin would not take these: delete them for good, or stop here?</summary>
+    /// <summary>The recycle bin would not take these: delete them for good, or stop here? Asked by <see cref="IDialogs.ConfirmDelete"/>.</summary>
     RecycleUnavailable,
 
     /// <summary>The folder an undo puts items back into is gone: pick another, or leave the undo for later?</summary>
@@ -104,6 +104,19 @@ public interface IDialogs {
 
     /// <summary>The index of the answer picked, or -1 for Cancel.</summary>
     int Choose(ChoiceRequest request);
+
+    /// <summary>
+    /// The question before a delete, or after the bin refused part of one:
+    /// every item named, what the folders hold counted while it is up
+    /// (<see cref="DeleteConfirmation.CountAsync"/>, stopped when it closes).
+    /// True when the user said yes; Cancel is the default and the answer to
+    /// Esc and Enter. Its kind, for a harness, follows
+    /// <see cref="DeleteConfirmation.Kind"/>:
+    /// <see cref="DialogKind.RecycleConfirm"/>,
+    /// <see cref="DialogKind.PermanentDeleteConfirm"/> or
+    /// <see cref="DialogKind.RecycleUnavailable"/>.
+    /// </summary>
+    bool ConfirmDelete(DeleteConfirmation question);
 
     /// <summary>Text entry; null when cancelled.</summary>
     string? Prompt(string title, string label, string initial, bool filenameMode);

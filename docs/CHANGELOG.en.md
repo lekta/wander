@@ -37,6 +37,9 @@ follow [SemVer](https://semver.org/). Dates in ISO format.
 - **Details view** — Name takes the free space, no sideways scrolling;
   column widths are remembered.
 - **Extracting from zip** — with bytes, speed and time left.
+- **The delete question is a table**: every name, folder sizes and
+  contents, companions, read-only files — in one window, themed; deleting
+  for good takes a click.
 
 ### Fixed
 - **Crash on `.doc`.**
@@ -52,7 +55,8 @@ follow [SemVer](https://semver.org/). Dates in ISO format.
   doesn't matter, `m` next to the hours means minutes.
 - **Minor**: a folder after extraction gets its tree arrow without `F5`;
   drops onto search results go only into folders; arrows on archive
-  folders only where there are subfolders; `/raw` in the type search.
+  folders only where there are subfolders; `/raw` in the type search; the
+  rating plate in Icons covered the picture.
 
 ## [0.6.0-beta] — 2026-10-26
 

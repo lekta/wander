@@ -129,12 +129,6 @@ public static partial class Strings {
     /// <summary>Изображение.png</summary>
     public static string PasteImageFileName => Get(nameof(PasteImageFileName));
 
-    /// <summary>файл</summary>
-    public static string KindFile => Get(nameof(KindFile));
-
-    /// <summary>папку</summary>
-    public static string KindFolder => Get(nameof(KindFolder));
-
     /// <summary>… и ещё {0}</summary>
     public static string AndMore => Get(nameof(AndMore));
 

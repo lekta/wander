@@ -2,7 +2,8 @@ namespace Wander.Core.Icons;
 
 public interface IIconProvider {
     /// <summary>Returns PNG bytes of the system icon for the given path, or null if unavailable.</summary>
-    byte[]? GetIcon(string path, IconSize size);
+    /// <param name="look">How a folder is drawn at the two thumbnail steps - what the view asks for; a file's picture ignores it.</param>
+    byte[]? GetIcon(string path, IconSize size, FolderLook look = default);
 
     /// <summary>
     /// Returns the icon only if it is already in memory; never touches the
@@ -19,7 +20,8 @@ public interface IIconProvider {
     /// a folder named <c>fast</c> with the icon of a file with no extension.
     /// Not knowing gets only what is cached for this one path.
     /// </param>
-    byte[]? TryGetCachedIcon(string path, IconSize size, bool? isFolder = null);
+    /// <param name="look">As for <see cref="GetIcon"/>: a folder is cached once per look.</param>
+    byte[]? TryGetCachedIcon(string path, IconSize size, bool? isFolder = null, FolderLook look = default);
 
     /// <summary>
     /// The shell's badge on a file - a version-control state, a sync state -

@@ -336,6 +336,15 @@
   <data name="ColumnModified" xml:space="preserve">
     <value>Modified</value>
   </data>
+  <data name="ColumnInside" xml:space="preserve">
+    <value>Inside</value>
+  </data>
+  <data name="DeleteTagCompanion" xml:space="preserve">
+    <value>companion</value>
+  </data>
+  <data name="DeleteTagReadOnly" xml:space="preserve">
+    <value>read-only</value>
+  </data>
   <data name="ActionCopy" xml:space="preserve">
     <value>Copy</value>
   </data>
@@ -595,31 +604,52 @@
     <value>Move to the Recycle Bin?</value>
   </data>
   <data name="ConfirmDeleteOne" xml:space="preserve">
-    <value>Permanently delete the {0} “{1}”?&#xA;&#xA;{2}</value>
+    <value>Permanently delete the {0} “{1}”?</value>
   </data>
   <data name="ConfirmRecycleOne" xml:space="preserve">
-    <value>Move the {0} “{1}” to the Recycle Bin?&#xA;&#xA;{2}</value>
+    <value>Move the {0} “{1}” to the Recycle Bin?</value>
   </data>
   <data name="ConfirmDeleteMany" xml:space="preserve">
-    <value>Permanently delete {0}?&#xA;&#xA;{1}</value>
+    <value>Permanently delete {0}?</value>
   </data>
   <data name="ConfirmRecycleMany" xml:space="preserve">
-    <value>Move {0} to the Recycle Bin?&#xA;&#xA;{1}</value>
-  </data>
-  <data name="ConfirmWithCompanions" xml:space="preserve">
-    <value>Companion files will go too: {0}.</value>
+    <value>Move {0} to the Recycle Bin?</value>
   </data>
   <data name="ConfirmIrreversible" xml:space="preserve">
     <value>This action can't be undone.</value>
   </data>
-  <data name="ConfirmReadOnlyTitle" xml:space="preserve">
-    <value>Read-only</value>
+  <data name="ConfirmDeleteTotal" xml:space="preserve">
+    <value>Total: {0}</value>
   </data>
-  <data name="ConfirmReadOnlyOne" xml:space="preserve">
-    <value>This item is read-only:&#xA;&#xA;{0}&#xA;&#xA;Delete it anyway?</value>
+  <data name="ConfirmDeleteTotalCounting" xml:space="preserve">
+    <value>Total: {0} — counting</value>
   </data>
-  <data name="ConfirmReadOnlyMany" xml:space="preserve">
-    <value>These items are read-only:&#xA;&#xA;{0}&#xA;&#xA;Delete them all anyway?</value>
+  <data name="ConfirmDeleteInside" xml:space="preserve">
+    <value>Inside: {0}</value>
+  </data>
+  <data name="ConfirmDeleteCounting" xml:space="preserve">
+    <value>counting</value>
+  </data>
+  <data name="ConfirmDeleteEmpty" xml:space="preserve">
+    <value>empty</value>
+  </data>
+  <data name="ConfirmDeleteUnreadable" xml:space="preserve">
+    <value>no access</value>
+  </data>
+  <data name="ConfirmDeleteAmount" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="ConfirmDeleteFilesAndFolders" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="MenuCaptionFileCount" xml:space="preserve">
+    <value>{0:N0} file|{0:N0} files</value>
+  </data>
+  <data name="MenuCaptionFolderCount" xml:space="preserve">
+    <value>{0:N0} folder|{0:N0} folders</value>
+  </data>
+  <data name="ConfirmDeleteReadOnly" xml:space="preserve">
+    <value>Read-only: {0} — the flag is cleared and they go with the rest.</value>
   </data>
   <data name="CannotPasteTitle" xml:space="preserve">
     <value>Can't paste</value>
@@ -734,6 +764,12 @@
   </data>
   <data name="ActionRetry" xml:space="preserve">
     <value>Retry</value>
+  </data>
+  <data name="ActionRecycle" xml:space="preserve">
+    <value>Recycle</value>
+  </data>
+  <data name="ActionDelete" xml:space="preserve">
+    <value>Delete</value>
   </data>
   <data name="ActionDeleteForGood" xml:space="preserve">
     <value>Delete permanently</value>
@@ -909,17 +945,17 @@
   <data name="RecycleUnavailableTitle" xml:space="preserve">
     <value>Can't move to the Recycle Bin</value>
   </data>
-  <data name="RecycleUnavailableIntro" xml:space="preserve">
-    <value>The Recycle Bin won't accept these, so they weren't deleted:</value>
+  <data name="RecycleUnavailableOne" xml:space="preserve">
+    <value>The Recycle Bin won't take the {0} “{1}”</value>
   </data>
-  <data name="RecycleUnavailableItem" xml:space="preserve">
-    <value>• {0} — {1}</value>
+  <data name="RecycleUnavailableMany" xml:space="preserve">
+    <value>The Recycle Bin won't take {0}</value>
   </data>
   <data name="RecycleUnavailableTooLong" xml:space="preserve">
-    <value>Reason: the path of the item, or of a file inside the folder, is longer than 259 characters.</value>
+    <value>The path of the item, or of a file inside the folder, is longer than 259 characters.</value>
   </data>
   <data name="RecycleUnavailableNoBin" xml:space="preserve">
-    <value>Reason: the drive has no Recycle Bin.</value>
+    <value>This drive has no Recycle Bin.</value>
   </data>
   <data name="RecycleUnavailableRestRecycled" xml:space="preserve">
     <value>Others already in the Recycle Bin: {0}.</value>

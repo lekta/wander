@@ -97,13 +97,6 @@ public sealed class MainViewModel : ObservableObject {
     /// <summary>How often a window held back by a modal question looks again.</summary>
     private static readonly TimeSpan _operationWindowRecheck = TimeSpan.FromMilliseconds(200);
 
-    /// <summary>
-    /// How long "delete for good" stays disabled once the bin's refusal is
-    /// put to the user (2026-09-21): an Enter pressed without looking, in the
-    /// middle of deleting file after file, must not reach it.
-    /// </summary>
-    private static readonly TimeSpan _deleteForGoodArmDelay = TimeSpan.FromMilliseconds(500);
-
     /// <summary>Smallest the preview pane may be, and what the file list keeps of the window beside it.</summary>
     private const double PreviewMinWidth = 120;
     private const double ListMinWidth = 240;
@@ -5374,61 +5367,30 @@ public sealed class MainViewModel : ObservableObject {
         }
 
         var paths = WithCompanions(snapshot);
-        int extras = paths.Count - snapshot.Count;
+        var readOnlys = snapshot.Where(en => en.IsReadOnly).ToList();
 
         // Permanent (Shift+Delete) always asks. Recycle asks only when the
         // user kept the "confirm" preference on — Ctrl+Z still restores from
-        // the bin so skipping the prompt is safe by default.
-        bool needsConfirm = permanent || (Settings.ConfirmRecycle && !confirmed);
+        // the bin so skipping the prompt is safe by default — or when some
+        // of it is read-only: that mark is cleared only on an answer, and the
+        // answer is given in the same question (decision of 2026-11-05), not
+        // in a second one.
+        bool needsConfirm = permanent || (Settings.ConfirmRecycle && !confirmed) || readOnlys.Count > 0;
         if (needsConfirm) {
-            string title = permanent ? Strings.ConfirmDeleteTitle : Strings.ConfirmRecycleTitle;
-            string message;
-            if (snapshot.Count == 1) {
-                var e0 = snapshot[0];
-                string kind = e0.Kind == EntryKind.Directory ? Strings.KindFolder : Strings.KindFile;
-                message = string.Format(
-                    permanent ? Strings.ConfirmDeleteOne : Strings.ConfirmRecycleOne,
-                    kind, e0.Name, e0.FullPath);
-            } else {
-                message = string.Format(
-                    permanent ? Strings.ConfirmDeleteMany : Strings.ConfirmRecycleMany,
-                    CountCaption.Of(snapshot),
-                    string.Join("\n", snapshot.Take(5).Select(e => "• " + e.Name))
-                        + (snapshot.Count > 5 ? "\n" + string.Format(Strings.AndMore, snapshot.Count - 5) : ""));
-            }
-            // The companions are about to go too; a confirmation that hides
-            // that would be a confirmation of the wrong thing.
-            if (extras > 0) {
-                message += "\n\n" + string.Format(Strings.ConfirmWithCompanions, extras);
-            }
-            if (permanent) {
-                message += "\n\n" + Strings.ConfirmIrreversible;
-            }
-
-            bool accepted = _dialogs.Ask(new DialogRequest(
-                permanent ? DialogKind.PermanentDeleteConfirm : DialogKind.RecycleConfirm,
-                title, message, DialogButtons.OkCancel,
-                permanent ? DialogIcon.Error : DialogIcon.Warning));
+            // Every item by name, what the folders hold counted while the
+            // question is up, and the companions that go too: a
+            // confirmation that hides any of it confirms the wrong thing.
+            var question = new DeleteConfirmation(
+                snapshot, permanent ? DeleteQuestionKind.Permanent : DeleteQuestionKind.Recycle, Settings.IntegrateCompanions, _fs);
+            bool accepted = _dialogs.ConfirmDelete(question);
 
             if (!accepted) {
-                _log.Info($"Delete cancelled by user (permanent={permanent}, items={snapshot.Count})");
+                _log.Info($"Delete cancelled by user (permanent={permanent}, items={snapshot.Count}, read-only={readOnlys.Count})");
                 return;
             }
         }
 
-        var readOnlys = snapshot.Where(en => en.IsReadOnly).ToList();
         if (readOnlys.Count > 0) {
-            string list = string.Join("\n", readOnlys.Take(5).Select(en => "• " + en.Name)) +
-                (readOnlys.Count > 5 ? "\n" + string.Format(Strings.AndMore, readOnlys.Count - 5) : "");
-            string roMsg = string.Format(
-                readOnlys.Count == 1 ? Strings.ConfirmReadOnlyOne : Strings.ConfirmReadOnlyMany, list);
-
-            bool roAccepted = _dialogs.Ask(new DialogRequest(
-                DialogKind.ReadOnlyConfirm, Strings.ConfirmReadOnlyTitle, roMsg,
-                DialogButtons.OkCancel, DialogIcon.Warning));
-            if (!roAccepted) {
-                return;
-            }
             foreach (var ro in readOnlys) {
                 try {
                     _fs.ClearReadOnly(ro.FullPath);
@@ -5536,7 +5498,7 @@ public sealed class MainViewModel : ObservableObject {
         // delete's own question is not asked again; everything else it does
         // (the guard, the Warn line, the cleared undo stack) it does.
         var unrecyclable = results.Where(r => r.Error is RecycleUnavailableException).ToList();
-        if (unrecyclable.Count > 0 && AskDeleteForGood(unrecyclable, ok)) {
+        if (unrecyclable.Count > 0 && await AskDeleteForGoodAsync(unrecyclable, snapshot, ok)) {
             var forGood = unrecyclable.Select(r => r.Path).ToList();
             var chosen = new HashSet<string>(forGood, StringComparer.OrdinalIgnoreCase);
             await RunDeleteAsync(forGood, snapshot.Where(e => chosen.Contains(e.FullPath)).ToList(), permanent: true);
@@ -5596,46 +5558,49 @@ public sealed class MainViewModel : ObservableObject {
     }
 
     /// <summary>
-    /// "The bin will not take these: delete them for good?" Every refused
-    /// item is named - up to ten, then a count - with why, what the same
+    /// "The bin will not take these: delete them for good?" - the delete
+    /// question in its third form (decision of 2026-11-05): every refused
+    /// item on a row, why in a plaque that cannot be missed, what the same
     /// delete already put in the bin, and what a delete for good costs.
-    /// Both answers are named; "stop here" is the default, Enter and Esc
-    /// alike, and "delete for good" arms only after
-    /// <see cref="_deleteForGoodArmDelay"/>.
+    /// "Stop here" is the default, Enter and Esc alike; "delete for good" is
+    /// out of Tab's reach and arms only half a second after the question is
+    /// up (<see cref="DeleteConfirmWindow"/>).
     /// </summary>
     /// <param name="refused">What the bin refused, each with its <see cref="RecycleUnavailableException"/>.</param>
+    /// <param name="snapshot">The rows the delete started from: what is known of the refused without asking the disk.</param>
     /// <param name="recycled">What the same delete did put in the bin.</param>
-    private bool AskDeleteForGood(IReadOnlyList<DeleteResult> refused, int recycled) {
-        const int named = 10;
-        var lines = new List<string> { Strings.RecycleUnavailableIntro };
-        foreach (var item in refused.Take(named)) {
-            string path = item.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            lines.Add(string.Format(Strings.RecycleUnavailableItem, Path.GetFileName(path), Path.GetDirectoryName(path)));
+    private async Task<bool> AskDeleteForGoodAsync(IReadOnlyList<DeleteResult> refused, IReadOnlyList<FileSystemEntry> snapshot, int recycled) {
+        var known = new Dictionary<string, FileSystemEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in snapshot) {
+            known.TryAdd(entry.FullPath, entry);
         }
-        if (refused.Count > named) {
-            lines.Add(string.Format(Strings.AndMore, refused.Count - named));
-        }
-
-        lines.Add("");
-        lines.AddRange(refused
-            .Select(r => ((RecycleUnavailableException)r.Error!).Reason)
-            .Distinct()
-            .Select(reason => reason == RecycleUnavailableReason.PathTooLong
-                ? Strings.RecycleUnavailableTooLong
-                : Strings.RecycleUnavailableNoBin));
-        if (recycled > 0) {
-            lines.Add(string.Format(Strings.RecycleUnavailableRestRecycled, recycled));
+        string[] paths = refused.Select(r => r.Path).ToArray();
+        // A refused companion is not among the rows: it is read from the disk, off the UI thread.
+        var entries = await Task.Run(() => paths
+            .Select(p => known.TryGetValue(p, out var entry) ? entry : EntryOrNull(p))
+            .OfType<FileSystemEntry>()
+            .ToList());
+        if (entries.Count == 0) {
+            return false;
         }
 
-        lines.Add("");
-        lines.Add(Strings.RecycleUnavailableIrreversible);
-
-        bool accepted = _dialogs.Choose(new ChoiceRequest(
-            DialogKind.RecycleUnavailable, Strings.RecycleUnavailableTitle, string.Join("\n", lines),
-            new[] { Strings.ActionDeleteForGood }, Strings.ActionAbort, _deleteForGoodArmDelay)) == 0;
+        var question = new DeleteConfirmation(entries, DeleteQuestionKind.Refused, withCompanions: false, _fs) {
+            Reasons = refused.Select(r => ((RecycleUnavailableException)r.Error!).Reason).Distinct().ToList(),
+            Recycled = recycled,
+        };
+        bool accepted = _dialogs.ConfirmDelete(question);
         _log.Info($"Recycle refused for {refused.Count} item(s): {(accepted ? "user chose to delete them for good" : "left in place")}");
 
         return accepted;
+    }
+
+    /// <summary>Any thread. What the disk says of <paramref name="path"/>; null when it says nothing.</summary>
+    private FileSystemEntry? EntryOrNull(string path) {
+        try {
+            return _fs.GetEntry(path);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return null;
+        }
     }
 
     /// <summary>

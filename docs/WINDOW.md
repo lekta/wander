@@ -268,13 +268,16 @@
 `Ask(DialogRequest)` (`DialogKind`, заголовок, текст, кнопки, значок;
 кнопка по умолчанию всегда отменяющая, поэтому не поле),
 `Choose(ChoiceRequest)` (ответы на кнопках, «Отмена» по умолчанию; индекс
-или -1), `Prompt`, `PickFolder`, `PickFile`,
-`CreateConflictResolver(skipIdentical)`. Продакшн — `WpfDialogs`
-(`MessageBox` поверх активного окна, но не окна операции,
-`ITransientWindow`; `ChoiceDialog`, `PromptDialog`, `OpenFolderDialog`,
-`OpenFileDialog`, `DispatcherConflictResolver`); харнесс подставляет
-`ScriptedDialogs` до постройки вьюмодели. Голый `MessageBox.Show` — только
-аварийный в `CrashReporter`.
+или -1), `ConfirmDelete(DeleteConfirmation)` (вопрос перед удалением —
+FILEOPS, «Вопрос перед удалением — таблицей»), `Prompt`, `PickFolder`,
+`PickFile`, `CreateConflictResolver(skipIdentical)`. Продакшн —
+`WpfDialogs` (`MessageBox` поверх активного окна, но не окна операции,
+`ITransientWindow`; `ChoiceDialog`, `DeleteConfirmWindow` — своё окно в
+обеих темах, `PromptDialog`, `OpenFolderDialog`, `OpenFileDialog`,
+`DispatcherConflictResolver`); харнесс подставляет `ScriptedDialogs` до
+постройки вьюмодели, вопрос удаления отвечается по виду
+(`RecycleConfirm`, `PermanentDeleteConfirm`, `RecycleUnavailable`). Голый
+`MessageBox.Show` — только аварийный в `CrashReporter`.
 
 ### Клавиатурные области
 
@@ -539,6 +542,33 @@ constraint отдаёт прежний `DesiredSize`, и WPF не помечае
   рисуется миниатюра, инвалидирует диск; поднимать без оглядки (решение
   человека 2026-10-09): кэш собирается быстро, обновивший версию
   принимает, что что-то перестроится.
+- **Папка — своя картинка** (PLAN F1, решения человека 2026-11-06;
+  примерка — https://claude.ai/artifact/5GtGMNp5U1Aa8tn72DJMGs,
+  `Folder.dc.html`). На ступенях Medium / Large `FolderPictures`
+  (Platform) рисует папку из миниатюр её файлов той же ступени — тот же
+  `GetIcon` по файлу: память, диск, свои отрисовщики; папка — своя
+  векторная (`FolderThumbnail`, проценты коробки из примерки, волосяные
+  линии — в пикселях вида: 48 / 96 / 216). Вид — из шаблона:
+  `AsyncIcon.FolderGrid` (галерея) → `FolderLook` → ключ памяти
+  `dir|путь|ступень|grid`; каскад из 2 («Плитка», Medium), из 3
+  («Значки», Large), 2×2 лицом папки (галерея). Программы и модели —
+  без карточки и подложки (решение человека 2026-11-06, второй круг
+  примерки): значок со своей прозрачностью в наибольшем квадрате своего
+  места, тень по контуру; картинка от темы не зависит.
+  **Отбор** — `Core/Listing/FolderPicture` (тест): весомые по расширению
+  (`ContentOf`), без скрытых, служебных, спутников, копий, бэкапов
+  Blender; главный exe первым (`MainProgram`), по одному каждого типа,
+  добор. **Обход** — один проход с бюджетом 25 мс и потолком 10 000
+  записей: дочитан — по свежести, нет — по прочитанному началу; режим
+  папки помнится на сеанс. Своих нет — по файлу из подпапок, уровень
+  вглубь, до 8 подпапок, в том же бюджете. **Оболочке** остаются: корень
+  тома, архив, устройство, `desktop.ini` с `IconResource` / `IconFile`
+  (`DesktopIni.SetsIcon`), нечитаемая, сеть и съёмные, где в сеансе не
+  открывали (открыть = запросить миниатюру файла в ней, `NoteShown`; там
+  без подпапок). **Диск** (только Large) — `TryReadKeyed` по
+  `FolderPicture.Signature`: поколение | путь | mtime папки | вид | имя,
+  mtime, размер выбранных; не пишется, если миниатюра файла не пришла или
+  временная (`KeepsPicture`: нет кодека, пустая страница PDF).
 - Миниатюра не переживает свой файл — LISTING, «Слежение за папкой».
 
 ## Отзывчивость: приоритеты

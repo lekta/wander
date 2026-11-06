@@ -201,39 +201,6 @@ public static partial class Strings {
     /// <summary>Восстановлено: {0}, не удалось: {1} (например, «{2}»)</summary>
     public static string StatusRestoredPartly => Get(nameof(StatusRestoredPartly));
 
-    /// <summary>Удалить безвозвратно?</summary>
-    public static string ConfirmDeleteTitle => Get(nameof(ConfirmDeleteTitle));
-
-    /// <summary>Отправить в корзину?</summary>
-    public static string ConfirmRecycleTitle => Get(nameof(ConfirmRecycleTitle));
-
-    /// <summary>Удалить безвозвратно {0} «{1}»?  {2}</summary>
-    public static string ConfirmDeleteOne => Get(nameof(ConfirmDeleteOne));
-
-    /// <summary>Отправить в корзину {0} «{1}»?  {2}</summary>
-    public static string ConfirmRecycleOne => Get(nameof(ConfirmRecycleOne));
-
-    /// <summary>Удалить безвозвратно {0}?  {1}</summary>
-    public static string ConfirmDeleteMany => Get(nameof(ConfirmDeleteMany));
-
-    /// <summary>Отправить в корзину {0}?  {1}</summary>
-    public static string ConfirmRecycleMany => Get(nameof(ConfirmRecycleMany));
-
-    /// <summary>Вместе с ними уедут файлы-спутники: {0}.</summary>
-    public static string ConfirmWithCompanions => Get(nameof(ConfirmWithCompanions));
-
-    /// <summary>Это действие нельзя отменить.</summary>
-    public static string ConfirmIrreversible => Get(nameof(ConfirmIrreversible));
-
-    /// <summary>Только для чтения</summary>
-    public static string ConfirmReadOnlyTitle => Get(nameof(ConfirmReadOnlyTitle));
-
-    /// <summary>Элемент помечен «только для чтения»:  {0}  Всё равно удал…</summary>
-    public static string ConfirmReadOnlyOne => Get(nameof(ConfirmReadOnlyOne));
-
-    /// <summary>Эти элементы помечены «только для чтения»:  {0}  Всё равн…</summary>
-    public static string ConfirmReadOnlyMany => Get(nameof(ConfirmReadOnlyMany));
-
     /// <summary>Переместить?</summary>
     public static string ConfirmMoveTitle => Get(nameof(ConfirmMoveTitle));
 
@@ -368,27 +335,6 @@ public static partial class Strings {
 
     /// <summary>Куда вернуть {0}</summary>
     public static string UndoFolderGonePickTitle => Get(nameof(UndoFolderGonePickTitle));
-
-    /// <summary>Не помещается в корзину</summary>
-    public static string RecycleUnavailableTitle => Get(nameof(RecycleUnavailableTitle));
-
-    /// <summary>Корзина не принимает — не удалено:</summary>
-    public static string RecycleUnavailableIntro => Get(nameof(RecycleUnavailableIntro));
-
-    /// <summary>• {0} — {1}</summary>
-    public static string RecycleUnavailableItem => Get(nameof(RecycleUnavailableItem));
-
-    /// <summary>Причина: путь длиннее 259 знаков — у самого элемента или у файла…</summary>
-    public static string RecycleUnavailableTooLong => Get(nameof(RecycleUnavailableTooLong));
-
-    /// <summary>Причина: у диска нет корзины.</summary>
-    public static string RecycleUnavailableNoBin => Get(nameof(RecycleUnavailableNoBin));
-
-    /// <summary>Остальные {0} — уже в корзине.</summary>
-    public static string RecycleUnavailableRestRecycled => Get(nameof(RecycleUnavailableRestRecycled));
-
-    /// <summary>Удалить безвозвратно? Удалённое так не вернуть: ни Ctrl+Z, ни корзина.</summary>
-    public static string RecycleUnavailableIrreversible => Get(nameof(RecycleUnavailableIrreversible));
 
     /// <summary>«{0}» был занят{1} — отпущен через {2:0.0} с</summary>
     public static string StatusWasBusyOne => Get(nameof(StatusWasBusyOne));

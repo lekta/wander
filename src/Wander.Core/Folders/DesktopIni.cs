@@ -21,7 +21,34 @@ public static class DesktopIni {
 
     /// <summary>The file's text says the folder is one of pictures.</summary>
     public static bool SaysPictures(string text) {
-        bool inViewState = false;
+        string? type = ValueOf(text, "ViewState", "FolderType");
+
+        return type is not null
+            && (type.Equals("Pictures", StringComparison.OrdinalIgnoreCase)
+                || type.Equals("Photos", StringComparison.OrdinalIgnoreCase));
+    }
+
+
+    /// <summary>
+    /// The file, as read off the disk, gives the folder an icon of its own -
+    /// <c>[.ShellClassInfo] IconResource</c>, or the older <c>IconFile</c>.
+    /// Such a folder keeps the shell's picture (PLAN F1, decision
+    /// 2026-11-06): somebody chose that icon.
+    /// </summary>
+    public static bool SetsIcon(byte[] content) {
+        return SetsIcon(Decode(content));
+    }
+
+    /// <summary>The file's text gives the folder an icon of its own.</summary>
+    public static bool SetsIcon(string text) {
+        return !string.IsNullOrEmpty(ValueOf(text, ".ShellClassInfo", "IconResource"))
+            || !string.IsNullOrEmpty(ValueOf(text, ".ShellClassInfo", "IconFile"));
+    }
+
+
+    /// <summary>The first value of <paramref name="key"/> in <paramref name="section"/>, trimmed; null when it is not there.</summary>
+    private static string? ValueOf(string text, string section, string key) {
+        bool inSection = false;
         foreach (string raw in text.Split('\n')) {
             string line = raw.Trim();
             if (line.Length == 0 || line[0] == ';') {
@@ -29,23 +56,20 @@ public static class DesktopIni {
             }
             if (line[0] == '[') {
                 int end = line.IndexOf(']');
-                inViewState = end > 1 && line[1..end].Trim().Equals("ViewState", StringComparison.OrdinalIgnoreCase);
+                inSection = end > 1 && line[1..end].Trim().Equals(section, StringComparison.OrdinalIgnoreCase);
 
                 continue;
             }
 
             int equals = line.IndexOf('=');
-            if (!inViewState || equals <= 0 || !line[..equals].Trim().Equals("FolderType", StringComparison.OrdinalIgnoreCase)) {
+            if (!inSection || equals <= 0 || !line[..equals].Trim().Equals(key, StringComparison.OrdinalIgnoreCase)) {
                 continue;
             }
 
-            string type = line[(equals + 1)..].Trim();
-
-            return type.Equals("Pictures", StringComparison.OrdinalIgnoreCase)
-                || type.Equals("Photos", StringComparison.OrdinalIgnoreCase);
+            return line[(equals + 1)..].Trim();
         }
 
-        return false;
+        return null;
     }
 
 

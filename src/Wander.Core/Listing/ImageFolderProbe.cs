@@ -70,7 +70,8 @@ public static class ImageFolderProbe {
     }
 
 
-    private static bool IsContent(string name, CompanionResolver companions) {
+    /// <summary>The user's own file, not a sidecar, a copy or a fragment - shared with <see cref="FolderPicture"/>.</summary>
+    internal static bool IsContent(string name, CompanionResolver companions) {
         if (name.EndsWith('~')) {
             return false;
         }

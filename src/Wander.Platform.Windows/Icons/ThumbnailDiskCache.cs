@@ -134,8 +134,19 @@ public sealed class ThumbnailDiskCache {
     /// v19 (2026-11-02): no badge but the shortcut arrow in the picture -
     /// the list draws TortoiseGit's over the cell; v18 slots hold it baked in.
     /// </para>
+    ///
+    /// <para>
+    /// v20 (2026-11-06): folders are drawn by Wander from their files'
+    /// pictures (<c>FolderPictures</c>) and kept here under a key of their
+    /// own (<see cref="TryReadKeyed"/>).
+    /// </para>
+    ///
+    /// <para>
+    /// v21 (2026-11-06): a program's icon and a model go into a folder bare,
+    /// with a shadow - v20 folders hold them on a card of the theme.
+    /// </para>
     /// </summary>
-    private const int Generation = 19;
+    private const int Generation = 21;
 
     private readonly string _directory;
     private readonly ILogger _log;
@@ -195,70 +206,31 @@ public sealed class ThumbnailDiskCache {
 
 
     public byte[]? TryRead(string sourcePath) {
-        if (!IsEnabled()) {
-            return null;
-        }
+        return IsEnabled() ? ReadFile(TryBuildFileName(sourcePath)) : null;
+    }
 
-        string? file = TryBuildFileName(sourcePath);
-        if (file is null) {
-            return null;
-        }
 
-        try {
-            if (!File.Exists(file)) {
-                return null;
-            }
-
-            byte[] bytes = File.ReadAllBytes(file);
-            // Touch it so trimming evicts what nobody looks at rather than
-            // what happens to be oldest on disk.
-            File.SetLastWriteTimeUtc(file, DateTime.UtcNow);
-
-            return bytes.Length > 0 ? bytes : null;
-        } catch {
-            return null;
-        }
+    /// <summary>
+    /// A picture kept under a key the caller made - a folder's, whose path
+    /// and time cannot say what it shows (<c>FolderPicture.Signature</c>).
+    /// The generation and the side are added here, as for a file.
+    /// </summary>
+    public byte[]? TryReadKeyed(string key) {
+        return IsEnabled() ? ReadFile(FileNameFor(key)) : null;
     }
 
 
     public void Write(string sourcePath, byte[] png) {
-        if (!IsEnabled() || png.Length == 0) {
-            return;
+        if (IsEnabled() && png.Length > 0) {
+            WriteFile(TryBuildFileName(sourcePath), png);
         }
+    }
 
-        string? file = TryBuildFileName(sourcePath);
-        if (file is null) {
-            return;
-        }
 
-        // Write beside and move into place: two Wander windows browsing the
-        // same folder must not leave a half-written PNG behind.
-        string temp = file + "." + Environment.ProcessId + ".tmp";
-        try {
-            System.IO.Directory.CreateDirectory(_directory);
-            File.WriteAllBytes(temp, png);
-            File.Move(temp, file, overwrite: true);
-        } catch {
-            // Clean up after ourselves — a leftover temp file counts against
-            // no budget and would never be trimmed.
-            try {
-                File.Delete(temp);
-            } catch {
-                // Nothing more to try; Clear() sweeps these up too.
-            }
-            return;
-        }
-
-        bool trim;
-        lock (_lock) {
-            trim = ++_writesSinceTrim >= WritesBetweenTrims;
-            if (trim) {
-                _writesSinceTrim = 0;
-            }
-        }
-
-        if (trim) {
-            Trim();
+    /// <summary>Keeps a picture under a key the caller made - see <see cref="TryReadKeyed"/>.</summary>
+    public void WriteKeyed(string key, byte[] png) {
+        if (IsEnabled() && png.Length > 0) {
+            WriteFile(FileNameFor(key), png);
         }
     }
 
@@ -365,6 +337,65 @@ public sealed class ThumbnailDiskCache {
     }
 
 
+    private static byte[]? ReadFile(string? file) {
+        if (file is null) {
+            return null;
+        }
+
+        try {
+            if (!File.Exists(file)) {
+                return null;
+            }
+
+            byte[] bytes = File.ReadAllBytes(file);
+            // Touch it so trimming evicts what nobody looks at rather than
+            // what happens to be oldest on disk.
+            File.SetLastWriteTimeUtc(file, DateTime.UtcNow);
+
+            return bytes.Length > 0 ? bytes : null;
+        } catch {
+            return null;
+        }
+    }
+
+
+    private void WriteFile(string? file, byte[] png) {
+        if (file is null) {
+            return;
+        }
+
+        // Write beside and move into place: two Wander windows browsing the
+        // same folder must not leave a half-written PNG behind.
+        string temp = file + "." + Environment.ProcessId + ".tmp";
+        try {
+            System.IO.Directory.CreateDirectory(_directory);
+            File.WriteAllBytes(temp, png);
+            File.Move(temp, file, overwrite: true);
+        } catch {
+            // Clean up after ourselves — a leftover temp file counts against
+            // no budget and would never be trimmed.
+            try {
+                File.Delete(temp);
+            } catch {
+                // Nothing more to try; Clear() sweeps these up too.
+            }
+            return;
+        }
+
+        bool trim;
+        lock (_lock) {
+            trim = ++_writesSinceTrim >= WritesBetweenTrims;
+            if (trim) {
+                _writesSinceTrim = 0;
+            }
+        }
+
+        if (trim) {
+            Trim();
+        }
+    }
+
+
     /// <summary>
     /// Cache file for a source path, or null when the file cannot be
     /// stamped (gone, or a shell-namespace pseudo-path that has no
@@ -385,17 +416,21 @@ public sealed class ThumbnailDiskCache {
                 return null;
             }
 
-            int side;
-            lock (_lock) {
-                side = _side;
-            }
-            string version = side == ThumbnailCacheOptions.BaseSide ? $"v{Generation}" : $"v{Generation}s{side}";
-            string key = $"{version}|{sourcePath.ToLowerInvariant()}|{info.LastWriteTimeUtc.Ticks}|{info.Length}";
-            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
-
-            return Path.Combine(_directory, Convert.ToHexString(hash, 0, 16) + ".png");
+            return FileNameFor($"{sourcePath.ToLowerInvariant()}|{info.LastWriteTimeUtc.Ticks}|{info.Length}");
         } catch {
             return null;
         }
+    }
+
+    /// <summary>The cache file for a key, under this generation and side.</summary>
+    private string FileNameFor(string key) {
+        int side;
+        lock (_lock) {
+            side = _side;
+        }
+        string version = side == ThumbnailCacheOptions.BaseSide ? $"v{Generation}" : $"v{Generation}s{side}";
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{version}|{key}"));
+
+        return Path.Combine(_directory, Convert.ToHexString(hash, 0, 16) + ".png");
     }
 }

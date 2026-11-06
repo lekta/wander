@@ -86,6 +86,10 @@
     <SolidColorBrush x:Key="RowCaretBorder" Color="#C8C8C8"/>
     <SolidColorBrush x:Key="StatusWarningGlyph" Color="#FCE100"/>
     <SolidColorBrush x:Key="StatusErrorGlyph" Color="#FF99A4"/>
+    <SolidColorBrush x:Key="PlaqueWarningBackground" Color="#433519"/>
+    <SolidColorBrush x:Key="PlaqueWarningBorder" Color="#7A6233"/>
+    <SolidColorBrush x:Key="PlaqueErrorBackground" Color="#442726"/>
+    <SolidColorBrush x:Key="PlaqueErrorBorder" Color="#6E3A38"/>
     <SolidColorBrush x:Key="RowActionHover" Color="#2F4B63"/>
 
 

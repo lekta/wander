@@ -40,11 +40,22 @@ internal static class ServiceFiles {
     /// <summary>True when the entry is a file or a folder by one of the names above.</summary>
     public static bool Is(FileSystemEntry entry) {
         if (entry.Kind == EntryKind.Directory) {
-            return _folders.Contains(entry.Name);
+            return IsFolderName(entry.Name);
         }
 
-        return entry.Kind == EntryKind.File
-            && (_files.Contains(entry.Name)
-                || (entry.Name.Length > AppleDoublePrefix.Length && entry.Name.StartsWith(AppleDoublePrefix, StringComparison.Ordinal)));
+        return entry.Kind == EntryKind.File && IsFileName(entry.Name);
+    }
+
+
+    /// <summary>True when a file by this name is one of the above - for a walk that has names, not listing rows.</summary>
+    public static bool IsFileName(string name) {
+        return _files.Contains(name)
+            || (name.Length > AppleDoublePrefix.Length && name.StartsWith(AppleDoublePrefix, StringComparison.Ordinal));
+    }
+
+
+    /// <summary>True when a folder by this name is one of the above.</summary>
+    public static bool IsFolderName(string name) {
+        return _folders.Contains(name);
     }
 }

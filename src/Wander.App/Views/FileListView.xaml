@@ -457,10 +457,14 @@
             window's light surround rather than on a photograph's dark one -
             a pale plate and the amber the rest of the light chrome draws
             stars in. Same trick as the gallery: only rated cells build it.
+            The plate places itself in the corner: a bare ContentControl's
+            template ignores HorizontalContentAlignment, and a plate left to
+            stretch covered the whole picture (2026-11-06).
         -->
         <DataTemplate x:Key="IconsRatingBadge">
             <Border Background="{StaticResource WorkBadgeBackground}" BorderBrush="{DynamicResource Separator}"
-                    BorderThickness="1" CornerRadius="2" Padding="3,0" Margin="2">
+                    BorderThickness="1" CornerRadius="2" Padding="3,0" Margin="2"
+                    HorizontalAlignment="Left" VerticalAlignment="Bottom">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="7" Height="7" Margin="0,0,3,0"
                              VerticalAlignment="Center"
@@ -1146,7 +1150,6 @@
                                         Height="{DynamicResource IconsImageSize}"
                                         Margin="0,2,0,2"
                                         HorizontalAlignment="Center"
-                                        HorizontalContentAlignment="Left" VerticalContentAlignment="Bottom"
                                         Focusable="False"/>
                         <!--
                             Written for the selected state - whole name,
@@ -1263,7 +1266,9 @@
                         <Grid Width="{DynamicResource GalleryImageSize}"
                               Height="{DynamicResource GalleryImageSize}"
                               Margin="0,2,0,2">
+                            <!-- A folder wears its files as its face here, cards slid into it elsewhere (FolderGrid). -->
                             <controls:AsyncIcon IconPath="{Binding FullPath}" IconSize="Large" ShowsWork="True" PlaysSound="True"
+                                                FolderGrid="True"
                                                 StretchDirection="DownOnly"
                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
                                                 RenderOptions.BitmapScalingMode="HighQuality"

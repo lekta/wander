@@ -103,6 +103,11 @@ public sealed class AsyncIcon : Image {
             nameof(PlaysSound), typeof(bool), typeof(AsyncIcon),
             new PropertyMetadata(false, (d, _) => ((AsyncIcon)d).UpdatePlaying()));
 
+    public static readonly DependencyProperty FolderGridProperty =
+        DependencyProperty.Register(
+            nameof(FolderGrid), typeof(bool), typeof(AsyncIcon),
+            new PropertyMetadata(false, OnIconRequestChanged));
+
 
     // Thumbnail extraction is disk- and CPU-heavy, so it is metered rather
     // than let loose on the thread pool. Four rather than two: two was
@@ -213,6 +218,16 @@ public sealed class AsyncIcon : Image {
         set => SetValue(PlaysSoundProperty, value);
     }
 
+    /// <summary>
+    /// Draw a folder with its files laid out as its face, the gallery's way
+    /// (PLAN F1, decision 2026-11-06); off, they are cards slid into it.
+    /// The two looks are two pictures of one folder (<see cref="FolderLook"/>).
+    /// </summary>
+    public bool FolderGrid {
+        get => (bool)GetValue(FolderGridProperty);
+        set => SetValue(FolderGridProperty, value);
+    }
+
 
     /// <summary>
     /// The file at this path is not what it was: drop every cached picture
@@ -249,6 +264,12 @@ public sealed class AsyncIcon : Image {
     /// session. One dictionary probe per row, no disk access: the stamp is
     /// what the listing already read.
     /// </para>
+    ///
+    /// <para>
+    /// Folders as well: their picture shows what they hold, and a file
+    /// copied in while the folder's parent was not on screen moves the
+    /// folder's last-write time and nothing else Wander would see.
+    /// </para>
     /// </summary>
     public static void DropStale(IReadOnlyList<FileSystemEntry> rows) {
         if (rows.Count == 0) {
@@ -257,7 +278,7 @@ public sealed class AsyncIcon : Image {
 
         var icons = ServiceLocator.Get<IIconProvider>();
         foreach (var row in rows) {
-            if (row.Kind != EntryKind.File) {
+            if (row.Kind is not (EntryKind.File or EntryKind.Directory)) {
                 continue;
             }
             if (icons.ForgetIfChanged(row.FullPath, FileStamp.Of(row.ModifiedUtc, row.Size))) {
@@ -513,13 +534,19 @@ public sealed class AsyncIcon : Image {
         UpdatePlaying();
     }
 
+    /// <summary>
+    /// The picture of this path changed: asked again, the old one kept on
+    /// screen until the new one lands - a cell that goes empty in between
+    /// is one more change of frame than the picture needs (pillar 4).
+    /// </summary>
     private void OnInvalidated(string path) {
         if (string.Equals(path, IconPath, StringComparison.OrdinalIgnoreCase)) {
-            Reload();
+            Reload(keepShown: true);
         }
     }
 
-    private void Reload() {
+    /// <param name="keepShown">The same path asked again: what is on screen stays until the new picture replaces it.</param>
+    private void Reload(bool keepShown = false) {
         // Bumping the generation invalidates whatever load is in flight for
         // the previous path — its result will be dropped below.
         int generation = ++_generation;
@@ -539,8 +566,9 @@ public sealed class AsyncIcon : Image {
             _ = LoadBadgeAsync(path, generation);
         }
         var icons = ServiceLocator.Get<IIconProvider>();
+        var look = new FolderLook(FolderGrid);
 
-        byte[]? cached = icons.TryGetCachedIcon(path, size, RowIsFolder());
+        byte[]? cached = icons.TryGetCachedIcon(path, size, RowIsFolder(), look);
         if (cached is not null) {
             // Drawn before this session: set synchronously, so scrolling
             // back over seen tiles doesn't blink.
@@ -563,15 +591,19 @@ public sealed class AsyncIcon : Image {
                 return;
             }
 
-            Source = null;
+            if (!keepShown) {
+                Source = null;
+            }
             _ = DecodeAndApplyAsync(path, size, cached, generation);
 
             return;
         }
 
-        Source = null;
+        if (!keepShown) {
+            Source = null;
+        }
         if (!VisibleFirst) {
-            _ = LoadAndApplyAsync(path, size, generation, urgent: true);
+            _ = LoadAndApplyAsync(path, size, look, generation, urgent: true);
 
             return;
         }
@@ -583,7 +615,7 @@ public sealed class AsyncIcon : Image {
         // no order among them.
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => {
             if (generation == _generation) {
-                _ = LoadAndApplyAsync(path, size, generation, IsInViewport());
+                _ = LoadAndApplyAsync(path, size, look, generation, IsInViewport());
             }
         });
     }
@@ -713,8 +745,8 @@ public sealed class AsyncIcon : Image {
     }
 
 
-    private async Task LoadAndApplyAsync(string path, IconSize size, int generation, bool urgent) {
-        var image = await LoadAsync(path, size, () => generation == _generation, urgent).ConfigureAwait(false);
+    private async Task LoadAndApplyAsync(string path, IconSize size, FolderLook look, int generation, bool urgent) {
+        var image = await LoadAsync(path, size, look, () => generation == _generation, urgent).ConfigureAwait(false);
 
         // One more try before giving up. The list heals a failed icon by
         // itself — scrolling realises the container again and re-asks —
@@ -726,7 +758,7 @@ public sealed class AsyncIcon : Image {
         if (image is null && generation == _generation) {
             await Task.Delay(RetryDelayMs).ConfigureAwait(false);
             if (generation == _generation) {
-                image = await LoadAsync(path, size, () => generation == _generation, urgent).ConfigureAwait(false);
+                image = await LoadAsync(path, size, look, () => generation == _generation, urgent).ConfigureAwait(false);
             }
         }
 
@@ -775,7 +807,7 @@ public sealed class AsyncIcon : Image {
         return IsLightweight(size) ? DispatcherPriority.Normal : DispatcherPriority.ContextIdle;
     }
 
-    private static async Task<BitmapImage?> LoadAsync(string path, IconSize size, Func<bool> stillWanted, bool urgent) {
+    private static async Task<BitmapImage?> LoadAsync(string path, IconSize size, FolderLook look, Func<bool> stillWanted, bool urgent) {
         await _gate.WaitAsync(urgent).ConfigureAwait(false);
         try {
             // Re-check after queueing: a fast scroll through a big folder can
@@ -789,7 +821,7 @@ public sealed class AsyncIcon : Image {
 
             return await Task.Run(() => {
                 using (PerfLog.Measure("bg.icon-load")) {
-                    byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size);
+                    byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size, look);
 
                     // Decoded here rather than in IconConverter so the result
                     // lands in the decoded cache: the same tile scrolled back

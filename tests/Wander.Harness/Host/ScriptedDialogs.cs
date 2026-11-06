@@ -1,4 +1,5 @@
 using Wander.App.Dialogs;
+using Wander.Core.Actions;
 using Wander.Core.FileSystem;
 
 namespace Wander.Harness.Host;
@@ -69,6 +70,26 @@ public sealed class ScriptedDialogs : IDialogs {
         bool accept = request.Buttons == DialogButtons.Ok
             || (_answers.TryGetValue(request.Kind, out bool policy) ? policy : DefaultAnswer);
         Record($"{request.Kind} [{request.Buttons}] -> {(accept ? "accept" : "cancel")}: {OneLine(request.Message)}");
+
+        return accept;
+    }
+
+    /// <summary>
+    /// Answered like <see cref="Ask"/> under its kind - or, for "the bin
+    /// refused", by its choice policy as it was when that was a choice:
+    /// stop here unless a step says otherwise. Nothing is counted: the
+    /// question is never on screen.
+    /// </summary>
+    public bool ConfirmDelete(DeleteConfirmation question) {
+        var kind = question.Kind switch {
+            DeleteQuestionKind.Permanent => DialogKind.PermanentDeleteConfirm,
+            DeleteQuestionKind.Refused => DialogKind.RecycleUnavailable,
+            _ => DialogKind.RecycleConfirm,
+        };
+        bool accept = _answers.TryGetValue(kind, out bool policy) ? policy
+            : _choices.TryGetValue(kind, out int choice) ? choice == 0
+            : DefaultAnswer;
+        Record($"{kind} [{question.Rows.Count} rows] -> {(accept ? "accept" : "cancel")}: {OneLine(question.Headline)}");
 
         return accept;
     }
