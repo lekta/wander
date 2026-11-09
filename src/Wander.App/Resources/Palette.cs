@@ -74,6 +74,9 @@ internal static class Palette {
 
     public static readonly ThemeKey DiffHeaderLine = Themed("DiffHeaderLine");
 
+    /// <summary>A file's plate while its picture is made (AsyncIcon's stand-in): solid, not faded - faded reads as hidden.</summary>
+    public static readonly ThemeKey PendingPlate = Themed("PendingPlate");
+
 
     // --- No theme changes these --------------------------------------------------------------
 

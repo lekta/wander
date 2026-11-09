@@ -25,12 +25,15 @@ public sealed class WaveformSource : IWaveformSource {
     private readonly Lock _lock = new();
     private readonly Dictionary<string, Answer> _answers = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The tiles' quick shapes (<see cref="Sketch"/>), apart from the whole ones: the pane must never be handed a sketch.</summary>
+    private readonly Dictionary<string, Answer> _sketches = new(StringComparer.OrdinalIgnoreCase);
+
 
     public Waveform? Read(string path, TimeSpan? limit, CancellationToken cancel) {
         if (!TryStamp(path, out var stamp)) {
             return null;
         }
-        if (Cached(path, stamp, limit, out var kept)) {
+        if (Cached(_answers, path, stamp, limit, out var kept)) {
             return kept;
         }
 
@@ -38,28 +41,56 @@ public sealed class WaveformSource : IWaveformSource {
         using (PerfLog.Measure("bg.waveform")) {
             answer = Decode(path, limit, cancel);
         }
-        lock (_lock) {
-            if (_answers.Count >= CacheLimit) {
-                _answers.Clear();
-            }
-            _answers[path] = answer with { Stamp = stamp };
-        }
+        Keep(_answers, path, answer with { Stamp = stamp });
 
         return answer.Shape;
+    }
+
+    public Waveform? Sketch(string path, TimeSpan? limit, CancellationToken cancel) {
+        // A plain WAV is read whole as quickly as it would be sampled:
+        // nothing to decode.
+        if (Path.GetExtension(path).Equals(".wav", StringComparison.OrdinalIgnoreCase)) {
+            return Read(path, limit, cancel);
+        }
+        if (!TryStamp(path, out var stamp)) {
+            return null;
+        }
+        // The whole shape, once the pane or the column has decoded it, is
+        // the better one and costs nothing.
+        if (Cached(_answers, path, stamp, limit, out var whole) || Cached(_sketches, path, stamp, limit, out whole)) {
+            return whole;
+        }
+
+        Waveform? shape;
+        using (PerfLog.Measure("bg.waveform-sketch")) {
+            shape = MediaFoundationShape.ReadSketch(path, limit, cancel);
+        }
+        Keep(_sketches, path, new Answer(stamp, shape, shape is null ? limit : null));
+
+        return shape;
     }
 
     public bool TryGetCached(string path, TimeSpan? limit, out Waveform? shape) {
         shape = null;
 
-        return TryStamp(path, out var stamp) && Cached(path, stamp, limit, out shape);
+        return TryStamp(path, out var stamp) && Cached(_answers, path, stamp, limit, out shape);
     }
 
 
-    private bool Cached(string path, FileStamp stamp, TimeSpan? limit, out Waveform? shape) {
+    private void Keep(Dictionary<string, Answer> answers, string path, Answer answer) {
+        lock (_lock) {
+            if (answers.Count >= CacheLimit) {
+                answers.Clear();
+            }
+            answers[path] = answer;
+        }
+    }
+
+    private bool Cached(Dictionary<string, Answer> answers, string path, FileStamp stamp, TimeSpan? limit, out Waveform? shape) {
         shape = null;
         Answer kept;
         lock (_lock) {
-            if (!_answers.TryGetValue(path, out kept!) || kept.Stamp != stamp) {
+            if (!answers.TryGetValue(path, out kept!) || kept.Stamp != stamp) {
                 return false;
             }
         }

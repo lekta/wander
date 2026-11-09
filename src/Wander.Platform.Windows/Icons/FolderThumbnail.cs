@@ -58,6 +58,11 @@ internal static class FolderThumbnail {
     private static readonly Color _flapEdge = Color.FromArgb(0xFF, 0xEB, 0xAE);
     private static readonly Color _face = Color.FromArgb(0xFF, 0xCD, 0x52);
 
+    // The silhouette's cards (second fitting, 2026-11-09): solid, nothing
+    // faded - a faded card reads as a hidden file.
+    private static readonly Color _silhouetteCard = Color.FromArgb(0xEC, 0xEE, 0xF1);
+    private static readonly Color _silhouetteCell = Color.FromArgb(0xFF, 0xF3, 0xCF);
+
     /// <summary>A bare icon's shadow: its outline in black at this share of its opacity.</summary>
     private static readonly ColorMatrix _shade = new(new[] {
         new float[] { 0, 0, 0, 0, 0 },
@@ -83,6 +88,34 @@ internal static class FolderThumbnail {
 
     /// <summary>The picture, <paramref name="side"/> pixels square, as PNG.</summary>
     public static byte[] Paint(IReadOnlyList<FolderCard> cards, bool grid, int side, int nominal) {
+        return Draw(side, nominal, art => {
+            if (grid && cards.Count > 0) {
+                art.Face(cards.Count, (i, cell) => art.Cell(cards[i], cell));
+            } else {
+                art.Cascade(cards.Count, (i, box) => art.Card(cards[i], box));
+            }
+        });
+    }
+
+    /// <summary>
+    /// The folder while its picture is made (second fitting, 2026-11-09): the
+    /// same layout for as many files, each a plain card with its type's icon
+    /// at the size a file wears it - none on a card too small for one.
+    /// </summary>
+    /// <param name="types">Each file's type icon, null where the shell had none.</param>
+    /// <param name="inside">Whether each file was found a level down.</param>
+    public static byte[] PaintSilhouette(IReadOnlyList<Bitmap?> types, IReadOnlyList<bool> inside, bool grid, int side, int nominal) {
+        return Draw(side, nominal, art => {
+            if (grid) {
+                art.Face(types.Count, (i, cell) => art.SilhouetteCell(nominal >= 96 ? types[i] : null, inside[i] && nominal >= 96, cell));
+            } else {
+                art.Cascade(types.Count, (i, box) => art.SilhouetteCard(nominal >= 64 ? types[i] : null, box));
+            }
+        });
+    }
+
+
+    private static byte[] Draw(int side, int nominal, Action<Art> paint) {
         using var canvas = new Bitmap(side, side, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(canvas)) {
             g.Clear(Color.Transparent);
@@ -91,12 +124,7 @@ internal static class FolderThumbnail {
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
             g.CompositingQuality = CompositingQuality.HighQuality;
 
-            var art = new Art(g, side / 100f, side / (float)nominal);
-            if (grid && cards.Count > 0) {
-                art.Face(cards);
-            } else {
-                art.Cascade(cards);
-            }
+            paint(new Art(g, side / 100f, side / (float)nominal));
         }
 
         using var png = new MemoryStream();
@@ -191,8 +219,8 @@ internal static class FolderThumbnail {
         }
 
 
-        /// <summary>The back, up to three cards back to front - the first file in front - and the flap over them.</summary>
-        public void Cascade(IReadOnlyList<FolderCard> cards) {
+        /// <summary>The back, up to three cards back to front - the first file in front - and the flap over them; <paramref name="card"/> draws file i in its box.</summary>
+        public void Cascade(int count, Action<int, RectangleF> card) {
             using (var back = new Shape(_unit, 8, 20)
                 .Q(8, 15, 13, 15).L(36, 15).Q(39, 15, 41, 17.5f).L(44, 21).L(87, 21)
                 .Q(92, 21, 92, 26).L(92, 78).Q(92, 83, 87, 83).L(13, 83).Q(8, 83, 8, 78).Close())
@@ -200,19 +228,19 @@ internal static class FolderThumbnail {
                 _g.FillPath(brush, back);
             }
 
-            int n = Math.Min(cards.Count, _spots.Length);
+            int n = Math.Min(count, _spots.Length);
             if (n > 0) {
                 var spots = _spots[n - 1];
                 for (int i = 0; i < n; i++) {
-                    Card(cards[n - 1 - i], Box(spots[i].X, spots[i].Y, CardWidth, CardHeight));
+                    card(n - 1 - i, Box(spots[i].X, spots[i].Y, CardWidth, CardHeight));
                 }
             }
 
             Flap(n > 0 ? CascadeFlap : EmptyFlap);
         }
 
-        /// <summary>The back's tab, the face, and the pictures laid on it: one whole, two side by side, three as one and two, four as a square.</summary>
-        public void Face(IReadOnlyList<FolderCard> cards) {
+        /// <summary>The back's tab, the face, and the places on it: one whole, two side by side, three as one and two, four as a square; <paramref name="cell"/> fills place i.</summary>
+        public void Face(int count, Action<int, RectangleF> cell) {
             using (var tab = new Shape(_unit, 8, 27)
                 .L(8, 18).Q(8, 13, 13, 13).L(33, 13).Q(36, 13, 38, 15.5f).L(41, 19).L(87, 19).Q(92, 19, 92, 24).L(92, 27).Close())
             using (var brush = new SolidBrush(_back)) {
@@ -227,7 +255,7 @@ internal static class FolderThumbnail {
             const float halfHeight = (CellsHeight - CellGap) / 2;
             const float right = CellsLeft + halfWidth + CellGap;
             const float lower = CellsTop + halfHeight + CellGap;
-            RectangleF[] cells = Math.Min(cards.Count, 4) switch {
+            RectangleF[] cells = Math.Min(count, 4) switch {
                 1 => new[] { Box(CellsLeft, CellsTop, CellsWidth, CellsHeight) },
                 2 => new[] { Box(CellsLeft, CellsTop, halfWidth, CellsHeight), Box(right, CellsTop, halfWidth, CellsHeight) },
                 3 => new[] {
@@ -241,7 +269,61 @@ internal static class FolderThumbnail {
             };
 
             for (int i = 0; i < cells.Length; i++) {
-                Cell(cards[i], cells[i]);
+                cell(i, cells[i]);
+            }
+        }
+
+        /// <summary>A card of the cascade: shadow, a thin dark rim, a white edge and the picture inside it; a program or a model, bare.</summary>
+        public void Card(FolderCard card, RectangleF box) {
+            if (IsBare(card.Content)) {
+                Bare(card.Picture, box);
+
+                return;
+            }
+
+            using var shape = Frame(box, out var inner);
+            _g.FillPath(Brushes.White, shape);
+            FillWith(_g, shape, inner, card.Picture);
+        }
+
+        /// <summary>A card of the silhouette: the same frame, solid inside, its type's icon in the middle of what the flap leaves of it.</summary>
+        public void SilhouetteCard(Bitmap? type, RectangleF box) {
+            using (var shape = Frame(box, out _))
+            using (var brush = new SolidBrush(_silhouetteCard)) {
+                _g.FillPath(brush, shape);
+            }
+
+            var shown = box;
+            shown.Height = Math.Min(box.Bottom, CascadeFlap * _unit) - box.Y;
+            TypeIcon(type, shown);
+        }
+
+        /// <summary>A place on the gallery's face: white under a page, the picture - a program or a model bare - and a folder mark when it came from a subfolder.</summary>
+        public void Cell(FolderCard card, RectangleF cell) {
+            if (IsBare(card.Content)) {
+                Bare(card.Picture, cell);
+            } else {
+                using var shape = Rounded(cell, Px(0.025f));
+                if (IsPage(card.Content)) {
+                    _g.FillPath(Brushes.White, shape);
+                }
+                FillWith(_g, shape, cell, card.Picture);
+            }
+
+            if (card.Inside) {
+                SubfolderMark(cell);
+            }
+        }
+
+        /// <summary>A place on the silhouette's face: solid, its type's icon in the middle, the folder mark as on the picture.</summary>
+        public void SilhouetteCell(Bitmap? type, bool inside, RectangleF cell) {
+            using (var shape = Rounded(cell, Px(0.025f)))
+            using (var brush = new SolidBrush(_silhouetteCell)) {
+                _g.FillPath(brush, shape);
+            }
+            TypeIcon(type, cell);
+            if (inside) {
+                SubfolderMark(cell);
             }
         }
 
@@ -262,14 +344,11 @@ internal static class FolderThumbnail {
             return (float)Math.Max(1, Math.Round(viewSide * share, MidpointRounding.AwayFromZero)) * _px;
         }
 
-        /// <summary>A card of the cascade: shadow, a thin dark rim, a white edge and the picture inside it; a program or a model, bare.</summary>
-        private void Card(FolderCard card, RectangleF box) {
-            if (IsBare(card.Content)) {
-                Bare(card.Picture, box);
-
-                return;
-            }
-
+        /// <summary>
+        /// A card's frame: shadow, a thin dark rim and a white edge. Returns
+        /// the shape inside the edge - the caller's to fill - and its box.
+        /// </summary>
+        private GraphicsPath Frame(RectangleF box, out RectangleF inner) {
             float radius = Px(0.02f);
             float edge = Px(1f / 96);
 
@@ -297,28 +376,25 @@ internal static class FolderThumbnail {
                 _g.FillPath(Brushes.White, path);
             }
 
-            var inner = box;
+            inner = box;
             inner.Inflate(-edge, -edge);
-            using var shape = Rounded(inner, Math.Max(0, radius - edge));
-            _g.FillPath(Brushes.White, shape);
-            FillWith(_g, shape, inner, card.Picture);
+
+            return Rounded(inner, Math.Max(0, radius - edge));
         }
 
-        /// <summary>A place on the gallery's face: white under a page, the picture - a program or a model bare - and a folder mark when it came from a subfolder.</summary>
-        private void Cell(FolderCard card, RectangleF cell) {
-            if (IsBare(card.Content)) {
-                Bare(card.Picture, cell);
-            } else {
-                using var shape = Rounded(cell, Px(0.025f));
-                if (IsPage(card.Content)) {
-                    _g.FillPath(Brushes.White, shape);
-                }
-                FillWith(_g, shape, cell, card.Picture);
+        /// <summary>
+        /// A type's icon in the middle of a place, at the size a file wears
+        /// it in a list (32 pixels of the view), smaller only where the place is.
+        /// </summary>
+        private void TypeIcon(Bitmap? type, RectangleF place) {
+            if (type is null) {
+                return;
             }
 
-            if (card.Inside) {
-                SubfolderMark(cell);
-            }
+            float side = Math.Min(32 * _px, Math.Min(place.Width, place.Height) * 0.7f);
+            var square = new RectangleF(place.X + ((place.Width - side) / 2), place.Y + ((place.Height - side) / 2), side, side);
+            using var sized = Sized(type, square, cover: false, out var at);
+            _g.DrawImage(sized, at.X, at.Y, sized.Width, sized.Height);
         }
 
         /// <summary>

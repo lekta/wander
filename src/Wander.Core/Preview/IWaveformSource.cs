@@ -13,6 +13,13 @@ public interface IWaveformSource {
     Waveform? Read(string path, TimeSpan? limit, CancellationToken cancel);
 
     /// <summary>
+    /// A quick shape for a tile: short windows along the track rather than
+    /// all of it (<see cref="WaveformSketch"/>) - or the whole shape, when it
+    /// is known already. Null as for <see cref="Read"/>. Call off the UI thread.
+    /// </summary>
+    Waveform? Sketch(string path, TimeSpan? limit, CancellationToken cancel);
+
+    /// <summary>
     /// What <see cref="Read"/> would answer, when it has already been
     /// worked out for the file as it is now - null included. False when it
     /// has not.

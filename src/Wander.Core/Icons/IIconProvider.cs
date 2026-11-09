@@ -3,7 +3,21 @@ namespace Wander.Core.Icons;
 public interface IIconProvider {
     /// <summary>Returns PNG bytes of the system icon for the given path, or null if unavailable.</summary>
     /// <param name="look">How a folder is drawn at the two thumbnail steps - what the view asks for; a file's picture ignores it.</param>
-    byte[]? GetIcon(string path, IconSize size, FolderLook look = default);
+    /// <param name="cancel">
+    /// The picture is not wanted any more - its cell left the screen. The
+    /// long work gives up on it (a track's shape, a folder drawn from its
+    /// files) and the answer is null, remembered nowhere.
+    /// </param>
+    byte[]? GetIcon(string path, IconSize size, FolderLook look = default, CancellationToken cancel = default);
+
+    /// <summary>
+    /// A folder's picture while its own one is still being made (decision
+    /// 2026-11-09, "silhouette"): the folder as it will stand - as many cards
+    /// as files it will show, each a plain card with its file's type icon.
+    /// PNG at the step's size; null for a file, for a folder with nothing to
+    /// show and for one the shell draws. Cheap: one walk, type icons.
+    /// </summary>
+    byte[]? GetSilhouette(string path, IconSize size, FolderLook look = default, CancellationToken cancel = default);
 
     /// <summary>
     /// Returns the icon only if it is already in memory; never touches the

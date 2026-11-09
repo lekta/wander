@@ -49,6 +49,20 @@ internal static class MediaFoundationShape {
     /// <paramref name="limit"/>.
     /// </summary>
     public static Waveform? Read(string path, TimeSpan? limit, CancellationToken cancel) {
+        return Read(path, limit, sketch: false, cancel);
+    }
+
+    /// <summary>
+    /// The tile's shape: short windows along the track rather than all of it
+    /// (<see cref="WaveformSketch"/>); a track too short for that, or one
+    /// that declares no length, decoded whole. Null as for <see cref="Read(string, TimeSpan?, CancellationToken)"/>.
+    /// </summary>
+    public static Waveform? ReadSketch(string path, TimeSpan? limit, CancellationToken cancel) {
+        return Read(path, limit, sketch: true, cancel);
+    }
+
+
+    private static Waveform? Read(string path, TimeSpan? limit, bool sketch, CancellationToken cancel) {
         if (!_started.Value) {
             return null;
         }
@@ -77,7 +91,9 @@ internal static class MediaFoundationShape {
                 return null;
             }
 
-            return Decode(reader, channels, rate, declared, limit, cancel);
+            return sketch && WaveformSketch.Worth(declared)
+                ? Sample(reader, channels, rate, declared!.Value, cancel)
+                : Decode(reader, channels, rate, declared, limit, cancel);
         } catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException) {
             return null;
         } finally {
@@ -134,6 +150,70 @@ internal static class MediaFoundationShape {
         }
 
         return builder.Build(declared ?? TimeSpan.FromSeconds((double)builder.Frames / rate));
+    }
+
+    /// <summary>
+    /// The windows of <see cref="WaveformSketch"/>: a seek to each, and the
+    /// first <see cref="WaveformSketch.WindowLength"/> decoded from there - a
+    /// compressed track lands on the frame the seek finds, which is near
+    /// enough for a share of a few hundred milliseconds.
+    /// </summary>
+    private static Waveform? Sample(IntPtr reader, int channels, int rate, TimeSpan duration, CancellationToken cancel) {
+        var seek = Slot<SetCurrentPositionFn>(reader, 8);
+        var readSample = Slot<ReadSampleFn>(reader, 9);
+        var starts = WaveformSketch.Starts(duration);
+        var peaks = new float[starts.Length];
+        var squares = new double[starts.Length];
+        int window = Math.Max(1, (int)(WaveformSketch.WindowLength.TotalSeconds * rate));
+        float[] floats = [];
+        var anyFormat = Guid.Empty;
+
+        for (int w = 0; w < starts.Length; w++) {
+            cancel.ThrowIfCancellationRequested();
+
+            var at = new PROPVARIANT { vt = VT_I8, value = starts[w].Ticks };
+            if (seek(reader, ref anyFormat, ref at) < 0) {
+                return null;
+            }
+
+            int heard = 0;
+            float peak = 0;
+            double square = 0;
+            while (heard < window) {
+                if (readSample(reader, MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0,
+                        out _, out uint flags, out _, out IntPtr sample) < 0) {
+                    return null;
+                }
+
+                try {
+                    if ((flags & MF_SOURCE_READERF_ERROR) != 0) {
+                        return null;
+                    }
+                    if ((flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) != 0) {
+                        (channels, rate) = Format(reader);
+                        if (channels <= 0 || rate <= 0) {
+                            return null;
+                        }
+                    }
+                    if (sample != IntPtr.Zero) {
+                        floats = Samples(sample, floats, out int count);
+                        heard += WaveformSketch.Hear(floats.AsSpan(0, count - (count % channels)), channels, window - heard, ref peak, ref square);
+                    }
+                    if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0) {
+                        break;
+                    }
+                } finally {
+                    if (sample != IntPtr.Zero) {
+                        Marshal.Release(sample);
+                    }
+                }
+            }
+
+            peaks[w] = peak;
+            squares[w] = heard == 0 ? 0 : square / heard;
+        }
+
+        return WaveformSketch.Build(peaks, squares, duration);
     }
 
     /// <summary>The floats of one sample, in <paramref name="into"/> or a bigger array that replaces it.</summary>
@@ -252,8 +332,9 @@ internal static class MediaFoundationShape {
     private const uint MF_SOURCE_READERF_ENDOFSTREAM = 0x2;
     private const uint MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED = 0x20;
     private const ushort VT_UI8 = 21;
+    private const ushort VT_I8 = 20;
 
-    /// <summary>Only the VT_UI8 case is read; the size is the x64 PROPVARIANT's.</summary>
+    /// <summary>Only VT_UI8 is read and VT_I8 written; the size is the x64 PROPVARIANT's.</summary>
     [StructLayout(LayoutKind.Explicit, Size = 24)]
     private struct PROPVARIANT {
         [FieldOffset(0)] public ushort vt;
@@ -261,9 +342,14 @@ internal static class MediaFoundationShape {
     }
 
     // IMFSourceReader: 4 SetStreamSelection, 6 GetCurrentMediaType,
-    // 7 SetCurrentMediaType, 9 ReadSample, 12 GetPresentationAttribute.
+    // 7 SetCurrentMediaType, 8 SetCurrentPosition, 9 ReadSample,
+    // 12 GetPresentationAttribute.
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private delegate int SetStreamSelectionFn(IntPtr self, uint stream, int selected);
+
+    /// <summary>The time format GUID_NULL: 100-ns units, the position a VT_I8.</summary>
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int SetCurrentPositionFn(IntPtr self, ref Guid timeFormat, ref PROPVARIANT position);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private delegate int GetCurrentMediaTypeFn(IntPtr self, uint stream, out IntPtr type);

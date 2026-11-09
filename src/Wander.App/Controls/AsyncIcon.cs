@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -67,6 +68,9 @@ namespace Wander.App.Controls;
 public sealed class AsyncIcon : Image {
     /// <summary>One second between the two attempts at a failed icon.</summary>
     private const int RetryDelayMs = 1000;
+
+    /// <summary>A picture this late gets a stand-in (decision 2026-11-09): sooner, the stand-in itself would be a flash.</summary>
+    private const int InterimDelayMs = 150;
 
     /// <summary>The clock (Segoe MDL2 Assets "Recent"), picked from three drafts on 2026-09-21.</summary>
     private const string WorkGlyph = "\uE823";
@@ -140,6 +144,25 @@ public sealed class AsyncIcon : Image {
     /// <summary>Looks again when the next young claim is old enough for its clock - nothing else would say so.</summary>
     private static DispatcherTimer? _workDue;
 
+    /// <summary>
+    /// Icons whose picture is being made and that have no stand-in yet; one
+    /// timer for all of them (<see cref="InterimDelayMs"/>), running only
+    /// while there are any.
+    /// </summary>
+    private static readonly HashSet<AsyncIcon> _waiting = new();
+
+    private static DispatcherTimer? _interimDue;
+
+    /// <summary>
+    /// Thumbnails made and waiting to be set, landed together: one dispatcher
+    /// operation - and one layout and render - for a burst of them, rather
+    /// than one each. A folder of sources had its pictures ready in 0,3 s and
+    /// on screen in 1 s, waiting in the queue (first-screen line, 2026-11-09).
+    /// </summary>
+    private static readonly ConcurrentQueue<Action> _landing = new();
+
+    private static int _landingPosted;
+
 
     private int _generation;
     private bool _detached;
@@ -150,11 +173,39 @@ public sealed class AsyncIcon : Image {
     private bool _hot;
     private ImageSource? _badge;
 
+    /// <summary>
+    /// The load in flight, cancelled when the icon leaves the tree or asks
+    /// for something else: a track's shape, or a folder of tracks, stops
+    /// half-way instead of holding one of the four slots for a second after
+    /// the user has gone (2026-11-09).
+    /// </summary>
+    private CancellationTokenSource? _load;
+
+    /// <summary>When this icon joined <see cref="_waiting"/>.</summary>
+    private long _waitingSince;
+
+    /// <summary>
+    /// The stand-in while the picture is made (second fitting, 2026-11-09):
+    /// a folder's silhouette, or a file's type icon drawn on a plate. Drawn
+    /// here, not set as <see cref="Image.Source"/>: the picture's arrival
+    /// is still the one change of Source, and the first screen does not
+    /// count a stand-in as painted.
+    /// </summary>
+    private ImageSource? _interim;
+
+    /// <summary>The stand-in made off the UI thread, not shown yet.</summary>
+    private ImageSource? _interimReady;
+
+    private bool _interimIsFolder;
+
+    /// <summary>A picture file: its plate covers the place, as the photograph will.</summary>
+    private bool _interimFills;
+
 
     static AsyncIcon() {
         // Every picture that lands, for FirstScreenWatch. Hooked on the
         // property rather than raised from the load paths: a cached icon set
-        // synchronously, a decoded one landing at ContextIdle and a fresh
+        // synchronously, a decoded one landing with its burst and a fresh
         // shell load all end in the same setter.
         SourceProperty.OverrideMetadata(typeof(AsyncIcon), new FrameworkPropertyMetadata(OnSourceChanged));
     }
@@ -172,6 +223,13 @@ public sealed class AsyncIcon : Image {
     /// <summary>Raised on the UI thread when an icon gets its picture - see <see cref="FirstScreenWatch"/>.</summary>
     public static event Action<AsyncIcon>? Painted;
 
+    /// <summary>
+    /// Where the last load of this icon spent its time, for
+    /// <see cref="FirstScreenWatch"/>'s line. Null for a picture set from the
+    /// cache.
+    /// </summary>
+    internal IconLoadTimes? LastLoad { get; private set; }
+
 
     public AsyncIcon() {
         // Leaving the tree ends the request. A container discarded by a
@@ -184,6 +242,8 @@ public sealed class AsyncIcon : Image {
             Listen(false);
             _generation++;
             _detached = true;
+            CancelLoad();
+            DropInterim();
         };
         // A recycled container that comes back for the same file gets no
         // property change to reload it, so it asks again here.
@@ -336,8 +396,23 @@ public sealed class AsyncIcon : Image {
         }
     }
 
+    /// <summary>No picture yet, a stand-in shown: the place a picture would take - square, as the stand-in is.</summary>
+    protected override Size MeasureOverride(Size constraint) {
+        return Source is null && _interim is not null ? InterimSize(constraint) : base.MeasureOverride(constraint);
+    }
+
+    protected override Size ArrangeOverride(Size arrangeSize) {
+        return Source is null && _interim is not null ? InterimSize(arrangeSize) : base.ArrangeOverride(arrangeSize);
+    }
+
     protected override void OnRender(DrawingContext dc) {
-        base.OnRender(dc);
+        if (Source is null) {
+            if (_interim is not null) {
+                DrawInterim(dc);
+            }
+        } else {
+            base.OnRender(dc);
+        }
         if (_badge is not null && Source is not null) {
             // Lower left on the picture, where Explorer puts it: 3/16 of the
             // side as on its 256 jumbo, held between what reads and a mark.
@@ -506,7 +581,9 @@ public sealed class AsyncIcon : Image {
 
     private static void OnSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         if (e.NewValue is not null) {
-            Painted?.Invoke((AsyncIcon)d);
+            var icon = (AsyncIcon)d;
+            icon.DropInterim();
+            Painted?.Invoke(icon);
         }
     }
 
@@ -551,6 +628,9 @@ public sealed class AsyncIcon : Image {
         // the previous path — its result will be dropped below.
         int generation = ++_generation;
         _detached = false;
+        CancelLoad();
+        DropInterim();
+        LastLoad = null;
         if (_badge is not null) {
             _badge = null;
             InvalidateVisual();
@@ -594,7 +674,8 @@ public sealed class AsyncIcon : Image {
             if (!keepShown) {
                 Source = null;
             }
-            _ = DecodeAndApplyAsync(path, size, cached, generation);
+            LastLoad = new IconLoadTimes();
+            _ = DecodeAndApplyAsync(path, size, cached, generation, LastLoad);
 
             return;
         }
@@ -602,8 +683,17 @@ public sealed class AsyncIcon : Image {
         if (!keepShown) {
             Source = null;
         }
+        var times = new IconLoadTimes();
+        LastLoad = times;
+        var load = new CancellationTokenSource();
+        _load = load;
+        var cancel = load.Token;
+        if (Source is null && !IsLightweight(size)) {
+            StartWaiting();
+        }
         if (!VisibleFirst) {
-            _ = LoadAndApplyAsync(path, size, look, generation, urgent: true);
+            times.Started = times.Asked;
+            _ = LoadAndApplyAsync(path, size, look, generation, urgent: true, times, cancel);
 
             return;
         }
@@ -615,9 +705,23 @@ public sealed class AsyncIcon : Image {
         // no order among them.
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => {
             if (generation == _generation) {
-                _ = LoadAndApplyAsync(path, size, look, generation, IsInViewport());
+                times.Started = Stopwatch.GetTimestamp();
+                _ = LoadAndApplyAsync(path, size, look, generation, IsInViewport(), times, cancel);
             }
         });
+    }
+
+
+    /// <summary>Gives up the load in flight, if any: its token says so to the work still running.</summary>
+    private void CancelLoad() {
+        if (_load is null) {
+            return;
+        }
+
+        // Not disposed, as in WaveformStrip: the work still running only
+        // reads the token, and a source with no timer holds nothing.
+        _load.Cancel();
+        _load = null;
     }
 
 
@@ -679,8 +783,8 @@ public sealed class AsyncIcon : Image {
     /// stream: a tree whose rows have no icons reads as broken, while a
     /// tile whose picture arrives a beat later reads as loading. Medium
     /// and Large are per-file thumbnails — the heavy stream that must
-    /// never starve input, nor the listing they decorate, so they land at
-    /// ContextIdle.
+    /// never starve input, so they land together, one operation a burst (see
+    /// <see cref="Land"/>).
     /// </summary>
     private static bool IsLightweight(IconSize size) {
         return size is IconSize.Small or IconSize.Normal;
@@ -691,7 +795,8 @@ public sealed class AsyncIcon : Image {
     /// Decodes bytes the icon cache already had and applies the image the
     /// same way a fresh load does — below input priority.
     /// </summary>
-    private async Task DecodeAndApplyAsync(string path, IconSize size, byte[] bytes, int generation) {
+    private async Task DecodeAndApplyAsync(string path, IconSize size, byte[] bytes, int generation, IconLoadTimes times) {
+        times.Started = times.Admitted = times.Asked;
         // Re-checked on the pool as well: a folder left behind has hundreds
         // of these queued, and decoding for a tile that is gone is pure
         // waste in front of the next folder's own work.
@@ -701,8 +806,10 @@ public sealed class AsyncIcon : Image {
             return;
         }
 
-        _ = Dispatcher.BeginInvoke(ApplyPriority(size), () => {
+        times.Done = Stopwatch.GetTimestamp();
+        Land(size, () => {
             if (generation == _generation) {
+                times.Applied = Stopwatch.GetTimestamp();
                 Source = image;
             }
         });
@@ -736,7 +843,8 @@ public sealed class AsyncIcon : Image {
             return;
         }
 
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => {
+        // With the pictures (see Land): below Input it waits out every animation.
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => {
             if (generation == _generation) {
                 _badge = badge;
                 InvalidateVisual();
@@ -745,8 +853,9 @@ public sealed class AsyncIcon : Image {
     }
 
 
-    private async Task LoadAndApplyAsync(string path, IconSize size, FolderLook look, int generation, bool urgent) {
-        var image = await LoadAsync(path, size, look, () => generation == _generation, urgent).ConfigureAwait(false);
+    private async Task LoadAndApplyAsync(
+        string path, IconSize size, FolderLook look, int generation, bool urgent, IconLoadTimes times, CancellationToken cancel) {
+        var image = await LoadAsync(path, size, look, () => generation == _generation, urgent, times, cancel).ConfigureAwait(false);
 
         // One more try before giving up. The list heals a failed icon by
         // itself — scrolling realises the container again and re-asks —
@@ -756,9 +865,11 @@ public sealed class AsyncIcon : Image {
         // answers are negative-cached by the provider, so for those the
         // retry costs one dictionary lookup.
         if (image is null && generation == _generation) {
-            await Task.Delay(RetryDelayMs).ConfigureAwait(false);
+            // Not on the token: a load given up meanwhile is told by the
+            // generation below, without an exception in a task nobody awaits.
+            await Task.Delay(RetryDelayMs, CancellationToken.None).ConfigureAwait(false);
             if (generation == _generation) {
-                image = await LoadAsync(path, size, look, () => generation == _generation, urgent).ConfigureAwait(false);
+                image = await LoadAsync(path, size, look, () => generation == _generation, urgent, times, cancel).ConfigureAwait(false);
             }
         }
 
@@ -770,6 +881,14 @@ public sealed class AsyncIcon : Image {
         if (image is null) {
             if (generation == _generation) {
                 Log.Info($"[icon-diag] no icon from provider ({size}) — {path}");
+                // No picture is coming: out of the stand-ins' wait, or their
+                // timer would tick for as long as the cell is on screen. A
+                // stand-in already shown stays - better than an empty cell.
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => {
+                    if (generation == _generation) {
+                        StopWaiting();
+                    }
+                });
             }
 
             return;
@@ -778,8 +897,9 @@ public sealed class AsyncIcon : Image {
             return;
         }
 
-        _ = Dispatcher.BeginInvoke(ApplyPriority(size), () => {
+        Land(size, () => {
             if (generation == _generation) {
+                times.Applied = Stopwatch.GetTimestamp();
                 Source = image;
             }
         });
@@ -787,28 +907,201 @@ public sealed class AsyncIcon : Image {
 
 
     /// <summary>
-    /// The whole pipeline stays off the UI thread, and the finished image
-    /// comes back at <see cref="DispatcherPriority.ContextIdle"/> — below
-    /// input, and below the listing. A folder of photographs streams in
-    /// dozens of thumbnails a second, and landing each one at the default
-    /// (Normal) priority put that stream ahead of the user's clicks and
-    /// keys in the dispatcher queue: the window went unresponsive for
-    /// seconds while it was merely filling in pictures (ui.stall 2.5 s in
-    /// the session log, with no navigation in flight at all). Background
-    /// fixed that and made the next mistake: the rows of a new folder are
-    /// cleared and landed at Background too, and the queue is FIFO, so a
-    /// folder walked into from a folder of pictures showed the old rows
-    /// filling in until every one of their pictures had landed. Pictures
-    /// can wait; the user cannot, and neither can the folder they asked for.
+    /// The whole pipeline stays off the UI thread; the finished pictures land
+    /// together (<see cref="_landing"/>) - one operation for whatever is
+    /// ready, at <see cref="DispatcherPriority.Loaded"/>.
+    ///
+    /// <para>
+    /// One operation per picture at Normal put the stream ahead of the user's
+    /// clicks: the window went unresponsive for seconds while it filled in
+    /// pictures (ui.stall 2.5 s). The cost was the number of operations, not
+    /// the priority: one cheap operation per burst does not hold input.
+    /// </para>
+    ///
+    /// <para>
+    /// Below Input they starve (2026-11-09, stand of a smoke run with a
+    /// dispatcher ping): WPF serves Input and Background one operation per
+    /// turn, higher first, and while anything animates - a spinner turning,
+    /// counting the folder in the preview pane - every frame queues
+    /// <c>InputManager.HitTestInvalidatedAsync</c> at Input. There is always
+    /// one ahead, and a Background operation waited 100-300 ms on a thread
+    /// with nothing to do (a Send one took 0,5 ms): the pictures and their
+    /// stand-ins came all at once when the spinner stopped. ContextIdle,
+    /// the priority before, waited a second.
+    /// </para>
     ///
     /// <para>See <see cref="IsLightweight"/> for why the two classes differ.</para>
     /// </summary>
-    private static DispatcherPriority ApplyPriority(IconSize size) {
-        return IsLightweight(size) ? DispatcherPriority.Normal : DispatcherPriority.ContextIdle;
+    private void Land(IconSize size, Action apply) {
+        if (IsLightweight(size)) {
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Normal, apply);
+
+            return;
+        }
+
+        _landing.Enqueue(apply);
+        if (Interlocked.Exchange(ref _landingPosted, 1) == 0) {
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, LandAll);
+        }
     }
 
-    private static async Task<BitmapImage?> LoadAsync(string path, IconSize size, FolderLook look, Func<bool> stillWanted, bool urgent) {
+    private static void LandAll() {
+        Interlocked.Exchange(ref _landingPosted, 0);
+        while (_landing.TryDequeue(out var apply)) {
+            apply();
+        }
+    }
+
+
+    /// <summary>
+    /// The picture is being made: the stand-in is prepared now and shown if
+    /// the picture is still not here in <see cref="InterimDelayMs"/>. Only a
+    /// row that says what it is gets one.
+    /// </summary>
+    private void StartWaiting() {
+        if (RowIsFolder() is not { } folder || IconPath is not { Length: > 0 } path || _load is not { } load) {
+            return;
+        }
+
+        _waitingSince = Stopwatch.GetTimestamp();
+        _waiting.Add(this);
+        if (_interimDue is null) {
+            // Loaded, as the pictures land (see Land): a Background tick
+            // came twice a second while a spinner turned.
+            _interimDue = new DispatcherTimer(DispatcherPriority.Loaded, Dispatcher) {
+                Interval = TimeSpan.FromMilliseconds(30),
+            };
+            _interimDue.Tick += (_, _) => InterimPass();
+        }
+        _interimDue.Start();
+        PrepareInterim(path, folder, load.Token);
+    }
+
+    private void StopWaiting() {
+        _waiting.Remove(this);
+    }
+
+    /// <summary>
+    /// Every icon whose wait is over and whose stand-in is ready shows it, all
+    /// in this one pass - one frame for the screenful, not one each as they
+    /// trickle in. One not ready yet waits for the next pass. The timer stops
+    /// once none waits.
+    /// </summary>
+    private static void InterimPass() {
+        long due = Stopwatch.GetTimestamp() - (Stopwatch.Frequency * InterimDelayMs / 1000);
+        List<AsyncIcon>? ripe = null;
+        foreach (var icon in _waiting) {
+            if (icon._waitingSince <= due && Volatile.Read(ref icon._interimReady) is not null) {
+                (ripe ??= new List<AsyncIcon>()).Add(icon);
+            }
+        }
+        if (ripe is not null) {
+            foreach (var icon in ripe) {
+                _waiting.Remove(icon);
+                icon.ShowInterim();
+            }
+        }
+        if (_waiting.Count == 0) {
+            _interimDue!.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Makes the stand-in off the UI thread, outside the gate - a walk and
+    /// type icons, not a picture: a folder's silhouette, a file's type icon.
+    /// Kept in <see cref="_interimReady"/> for <see cref="InterimPass"/>.
+    /// </summary>
+    private void PrepareInterim(string path, bool folder, CancellationToken cancel) {
+        int generation = _generation;
+        var size = IconSize;
+        var look = new FolderLook(FolderGrid);
+        _ = Task.Run(() => {
+            if (generation != _generation) {
+                return;
+            }
+
+            try {
+                var icons = ServiceLocator.Get<IIconProvider>();
+                byte[]? bytes = folder ? icons.GetSilhouette(path, size, look, cancel) : icons.GetIcon(path, IconSize.Normal);
+                if (bytes is not null && generation == _generation) {
+                    var image = IconConverter.ToImage(bytes);
+                    Volatile.Write(ref _interimReady, image);
+                    // Asked for something else meanwhile: not this one's stand-in.
+                    if (generation != _generation) {
+                        Interlocked.CompareExchange(ref _interimReady, null, image);
+                    }
+                }
+            } catch {
+                // A stand-in is cosmetic twice over.
+            }
+        }, CancellationToken.None);
+    }
+
+    private void ShowInterim() {
+        if (Source is not null || IconPath is not { Length: > 0 } path || RowIsFolder() is not { } folder) {
+            return;
+        }
+
+        _interim = _interimReady;
+        _interimIsFolder = folder;
+        _interimFills = !folder && ImageFormats.IsImage(path);
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    /// <summary>No stand-in any more, nor a wait for one: the picture replaces it at once (decision 2026-11-09, no transitions).</summary>
+    private void DropInterim() {
+        StopWaiting();
+        _interimReady = null;
+        if (_interim is null) {
+            return;
+        }
+
+        _interim = null;
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    /// <summary>The stand-in's place: the biggest square the space allows, a folder's no bigger than its picture; a tile's icon where nothing bounds it.</summary>
+    private Size InterimSize(Size space) {
+        double side = Math.Min(space.Width, space.Height);
+        if (_interimIsFolder && _interim is not null) {
+            side = Math.Min(side, Math.Min(_interim.Width, _interim.Height));
+        }
+
+        return double.IsInfinity(side) ? new Size(48, 48) : new Size(side, side);
+    }
+
+    /// <summary>
+    /// The stand-in in this icon's box: a folder's silhouette as drawn; a
+    /// file's plate - covering the place for a picture file, a page's shape
+    /// for the rest - with its type icon in the middle at a list icon's size
+    /// (Pending.dc.html of the fitting).
+    /// </summary>
+    private void DrawInterim(DrawingContext dc) {
+        var box = new Rect(RenderSize);
+        if (_interimIsFolder) {
+            dc.DrawImage(_interim, box);
+
+            return;
+        }
+
+        double side = Math.Min(box.Width, box.Height);
+        var place = new Rect((box.Width - side) / 2, (box.Height - side) / 2, side, side);
+        var plate = _interimFills
+            ? place
+            : new Rect(place.X + side * 0.10, place.Y + side * 0.06, side * 0.80, side * 0.88);
+        double radius = side * (_interimFills ? 0.03 : 0.06);
+        dc.DrawRoundedRectangle(Palette.PendingPlate.Current, null, plate, radius, radius);
+
+        double icon = Math.Min(32, side * 0.6);
+        dc.DrawImage(_interim, new Rect(place.X + (side - icon) / 2, place.Y + (side - icon) / 2, icon, icon));
+    }
+
+    private static async Task<BitmapImage?> LoadAsync(
+        string path, IconSize size, FolderLook look, Func<bool> stillWanted, bool urgent, IconLoadTimes times, CancellationToken cancel) {
         await _gate.WaitAsync(urgent).ConfigureAwait(false);
+        times.Admitted = Stopwatch.GetTimestamp();
         try {
             // Re-check after queueing: a fast scroll through a big folder can
             // park hundreds of loads on this gate, and by the time one gets
@@ -819,9 +1112,9 @@ public sealed class AsyncIcon : Image {
                 return null;
             }
 
-            return await Task.Run(() => {
+            var image = await Task.Run(() => {
                 using (PerfLog.Measure("bg.icon-load")) {
-                    byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size, look);
+                    byte[]? bytes = ServiceLocator.Get<IIconProvider>().GetIcon(path, size, look, cancel);
 
                     // Decoded here rather than in IconConverter so the result
                     // lands in the decoded cache: the same tile scrolled back
@@ -830,6 +1123,9 @@ public sealed class AsyncIcon : Image {
                     return bytes is null ? null : IconImageCache.Get(path, size, bytes);
                 }
             }).ConfigureAwait(false);
+            times.Done = Stopwatch.GetTimestamp();
+
+            return image;
         } catch {
             // A missing icon is a cosmetic loss; never let it reach the
             // dispatcher's unhandled-exception handler.

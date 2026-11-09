@@ -54,7 +54,8 @@ internal sealed class FolderPictures {
     /// <summary>Entries one walk reads at most, whatever the clock says - the start of a folder of a million is as good as all of it.</summary>
     private const int WalkCap = 10_000;
 
-    private readonly Func<string, IconSize, byte[]?> _fileIcon;
+    private readonly Func<string, IconSize, CancellationToken, byte[]?> _fileIcon;
+    private readonly Func<string, byte[]?> _typeIcon;
     private readonly Func<string, bool> _lasting;
     private readonly ThumbnailDiskCache? _disk;
 
@@ -72,18 +73,26 @@ internal sealed class FolderPictures {
     private readonly ConcurrentDictionary<string, bool> _farRoots = new(StringComparer.OrdinalIgnoreCase);
 
 
-    /// <param name="fileIcon">A file's own picture at a step, as its tile has it.</param>
+    /// <param name="fileIcon">A file's own picture at a step, as its tile has it; given up on the token.</param>
+    /// <param name="typeIcon">A file's icon at the normal step - its type's, cheap - for the silhouette's cards.</param>
     /// <param name="lasting">Whether a file's picture is the one it will keep - not its type's icon for want of a codec: a folder showing one stays off the disk.</param>
     /// <param name="disk">Where the large step is kept between sessions; none, and every draw is fresh.</param>
-    public FolderPictures(Func<string, IconSize, byte[]?> fileIcon, Func<string, bool> lasting, ThumbnailDiskCache? disk) {
+    public FolderPictures(
+        Func<string, IconSize, CancellationToken, byte[]?> fileIcon, Func<string, byte[]?> typeIcon, Func<string, bool> lasting, ThumbnailDiskCache? disk) {
         _fileIcon = fileIcon;
+        _typeIcon = typeIcon;
         _lasting = lasting;
         _disk = disk;
     }
 
 
-    /// <summary>The folder's own picture as PNG, <paramref name="side"/> pixels square, or null for the shell's.</summary>
-    public byte[]? Render(string folder, IconSize size, FolderLook look, int side) {
+    /// <summary>
+    /// The folder's own picture as PNG, <paramref name="side"/> pixels square,
+    /// or null for the shell's. Throws <see cref="OperationCanceledException"/>
+    /// once <paramref name="cancel"/> says nobody looks: between the walk and
+    /// each file's picture, and inside a track's shape.
+    /// </summary>
+    public byte[]? Render(string folder, IconSize size, FolderLook look, int side, CancellationToken cancel) {
         if (size is not (IconSize.Medium or IconSize.Large) || !OnDisk(folder) || IsVolumeRoot(folder)) {
             return null;
         }
@@ -94,18 +103,11 @@ internal sealed class FolderPictures {
         }
 
         try {
-            long deadline = Stopwatch.GetTimestamp() + (Stopwatch.Frequency * WalkBudgetMs / 1000);
-            if (Walk(folder, deadline, out bool hasIni) is not { } read || (hasIni && SetsIcon(folder))) {
+            if (Pick(folder, size, look, far, cancel) is not { } picks) {
                 return null;
             }
 
             int cards = FolderPicture.Cards(size, look.Grid);
-            var companions = ServiceLocator.TryGet<CompanionResolver>() ?? CompanionResolver.Default;
-            // Not on a far drive: every subfolder is a walk over the wire,
-            // and none of them was opened.
-            var picks = FolderPicture.Choose(folder, read, cards, companions,
-                sub => far || Stopwatch.GetTimestamp() > deadline ? null : Walk(sub, deadline, out _));
-
             string? key = size == IconSize.Large && _disk is not null
                 ? FolderPicture.Signature(folder, Directory.GetLastWriteTimeUtc(folder), look, cards, picks)
                 : null;
@@ -113,11 +115,51 @@ internal sealed class FolderPictures {
                 return stored;
             }
 
-            return Compose(picks, size, look, side, key);
+            return Compose(picks, size, look, side, key, cancel);
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or ExternalException) {
             Log.Info($"[icon] folder picture failed: {ex.GetType().Name} - {folder}");
 
             return null;
+        }
+    }
+
+
+    /// <summary>
+    /// The folder as <see cref="Render"/> will draw it, while it does
+    /// (decision 2026-11-09): the same walk and the same files, each a plain
+    /// card with its type's icon - no file's picture asked for. Null where
+    /// <see cref="Render"/> gives the shell's turn, and for a folder with
+    /// nothing to show: its empty picture is the final one.
+    /// </summary>
+    public byte[]? Silhouette(string folder, IconSize size, FolderLook look, int side, CancellationToken cancel) {
+        if (size is not (IconSize.Medium or IconSize.Large) || !OnDisk(folder) || IsVolumeRoot(folder)) {
+            return null;
+        }
+
+        bool far = IsFar(folder);
+        if (far && !_visited.ContainsKey(folder)) {
+            return null;
+        }
+
+        var types = new List<Bitmap?>();
+        try {
+            if (Pick(folder, size, look, far, cancel) is not { Count: > 0 } picks) {
+                return null;
+            }
+
+            foreach (var pick in picks) {
+                cancel.ThrowIfCancellationRequested();
+                types.Add(_typeIcon(pick.Path) is { } bytes ? Decode(bytes) : null);
+            }
+
+            return FolderThumbnail.PaintSilhouette(
+                types, picks.Select(p => p.Inside).ToList(), look.Grid, side, FolderThumbnail.Nominal(look.Grid, size == IconSize.Medium));
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or ExternalException) {
+            return null;
+        } finally {
+            foreach (var type in types) {
+                type?.Dispose();
+            }
         }
     }
 
@@ -148,6 +190,25 @@ internal sealed class FolderPictures {
 
         return root is not null
             && string.Equals(folder.TrimEnd('\\', '/'), root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The files the folder's picture shows, by one walk on the budget; null
+    /// when the shell draws it - unreadable, or <c>desktop.ini</c> gives it an icon.
+    /// </summary>
+    private IReadOnlyList<FolderPick>? Pick(string folder, IconSize size, FolderLook look, bool far, CancellationToken cancel) {
+        long deadline = Stopwatch.GetTimestamp() + (Stopwatch.Frequency * WalkBudgetMs / 1000);
+        if (Walk(folder, deadline, out bool hasIni) is not { } read || (hasIni && SetsIcon(folder))) {
+            return null;
+        }
+
+        int cards = FolderPicture.Cards(size, look.Grid);
+        var companions = ServiceLocator.TryGet<CompanionResolver>() ?? CompanionResolver.Default;
+
+        // Not on a far drive: every subfolder is a walk over the wire, and
+        // none of them was opened.
+        return FolderPicture.Choose(folder, read, cards, companions,
+            sub => far || Stopwatch.GetTimestamp() > deadline || cancel.IsCancellationRequested ? null : Walk(sub, deadline, out _));
     }
 
     /// <summary>
@@ -221,18 +282,22 @@ internal sealed class FolderPictures {
     /// come is left out of the drawing, and then the drawing is left off the
     /// disk: the next session may get it.
     /// </summary>
-    private byte[] Compose(IReadOnlyList<FolderPick> picks, IconSize size, FolderLook look, int side, string? key) {
+    private byte[] Compose(IReadOnlyList<FolderPick> picks, IconSize size, FolderLook look, int side, string? key, CancellationToken cancel) {
         var cards = new List<FolderCard>(picks.Count);
         bool whole = true;
         try {
             foreach (var pick in picks) {
-                if (_fileIcon(pick.Path, size) is { } bytes && Decode(bytes) is { } picture) {
+                cancel.ThrowIfCancellationRequested();
+                if (_fileIcon(pick.Path, size, cancel) is { } bytes && Decode(bytes) is { } picture) {
                     cards.Add(new FolderCard(picture, pick.Content, pick.Inside));
                     whole &= _lasting(pick.Path);
                 } else {
                     whole = false;
                 }
             }
+            // A file's picture given up on comes back as none: the folder
+            // is given up too, rather than drawn and kept without it.
+            cancel.ThrowIfCancellationRequested();
 
             byte[] png;
             using (PerfLog.Measure("bg.folder-compose")) {

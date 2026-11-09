@@ -139,7 +139,7 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
 | Трогал | Автоматически | Руками (раздел ниже) | В логе |
 |---|---|---|---|
 | Навигация, `FolderSession`, приземление, место выделенной строки | `FolderSessionTests`, `ListingDiffTests`, `ListRulesTests` (`ListingArrival`), `RowFollowingTests`, `PathFollowingTests`; харнесс: серия навигаций, выделение после подъёма, `follow-row` (строка на месте: сторож, `F5`, порядок, фильтр, выдача поиска, смена вида) | Скорость; Фокус («Выделенный файл не уходит с экрана сам») | `nav.*`, `list.apply`, `ui.stall`, `First screen painted`, `WS ListingLanded` (с `LogActions`) |
-| Иконки, миниатюры, шлюз, приоритеты | `FolderPictureTests`, `DesktopIniTests`; харнесс: холодная `photos`, счётчики | Скорость (все пункты — трижды ломали друг друга); Дерево (иконки после запуска); Просмотр и галерея («Миниатюры папок») | `bg.thumb-*`, `bg.folder*`, `icon.decode-ui`, `layout.*`, `[icon-diag]`, `slow shell load`, `folder picture failed` |
+| Иконки, миниатюры, шлюз, приоритеты | `FolderPictureTests`, `DesktopIniTests`, `WaveformSketchTests`; харнесс: холодная `photos`, счётчики | Скорость (все пункты — трижды ломали друг друга); Дерево (иконки после запуска); Просмотр и галерея («Миниатюры папок», «Заглушка, пока миниатюра делается», «Волна на плитке трека») | `bg.thumb-*`, `bg.folder*`, `bg.waveform-sketch`, `icon.decode-ui`, `layout.*`, `[icon-diag]`, `slow shell load`, `folder picture failed`, `First screen painted` (`apply` — десятки мс) |
 | Шаблон плитки, `VirtualizingWrapPanel`, `TileLayout` | `TileLayoutTests` (в том числе якорь перелива), `TileMetricsTests`; харнесс: проходы раскладки в простое = 0, `visuals` на шаблон | Скорость (смена вида); Фокус (`F2` в четырёх видах); Просмотр (миниатюры не прыгают, перелив плиток держит видимое); Файловые операции (корзина в «Плитке») | `LAYOUT … visuals`, `COUNT layout.*`, `layout.realise` |
 | Выделение, фокус, области, rename; модель окна (`Core/Workspace`, `WorkspaceController`, исполнитель в `MainWindow`) | `GridNavigationTests`, `WindowZonesTests`, `KeyboardRulesTests`, `ListRulesTests`, `PanelRulesTests`, `TargetRulesTests`, `MenuContextTests`, `PreviewSubjectTests`; харнесс: клавиатурные сценарии, `post`, `assert-state`, `assert-focus` | Фокус, выделение и клавиатура — целиком; Дерево и закладки | `WS …`, `WS target:` (с `LogActions`) |
 | Файловые операции, undo, конфликты, спутники | `BatchExecutorTests`, `FileOperationServiceTests`, `UndoServiceTests` (`Forget` после безвозвратного удаления), `CompanionResolverTests`, `ConflictVerdictTests`, `ConflictBatchTests`, `MergeScannerTests`, `FileContentComparerTests`, `PathSafetyTests`, `SystemPathGuardTests`; харнесс: `file-ops` | Файловые операции; **Окно совпадений имён** (харнесс его не поднимает: `ScriptedDialogs` отвечает по политике); Обмен с системой | `ERROR` / `WARN`, строки операций |
@@ -1161,6 +1161,18 @@ exe), переменная `WANDER_DATA_DIR`, иначе `%LOCALAPPDATA%\Wander`
       показанную папку — картинка меняется без пустого кадра, строка не
       пересобирается, выделение на месте. Флешка и сеть: не открытая папка —
       картинка оболочки, открыть и вернуться — своя.
+- [ ] **Заглушка, пока миниатюра делается** (PLAN F1): папка треков или
+      снимков без кэша — через ~150 мс силуэт папки (карточки со значками
+      типов), трек и снимок — плашка со значком типа; заглушки экрана —
+      одним кадром; картинка сменяет заглушку мгновенно, без перехода,
+      пустого кадра и прыжка соседей. Быстрая миниатюра —
+      без заглушки. Пустая папка — сразу пустая. Тёмная тема и галерея —
+      плашка не бледная. Уйти, не дождавшись, — заглушки не остаются.
+- [ ] **Волна на плитке трека** (набросок, PLAN F1): у трека длиннее 30 с —
+      контур без мелких пиков, похож на целую волну в панели; в панели и
+      таблице — целая. Папка с треками приходит заметно быстрее, чем до
+      наброска. Уйти из папки треков, не дождавшись, — следующая папка не
+      ждёт её волн; вернуться — плитки дорисовываются.
 - [ ] **Видео**: повтор включён сам для ролика короче трёх секунд и для
       ролика без объявленной длительности; доигравший до конца ролик
       запускается кнопкой снова, кнопка возвращается в «воспроизведение»

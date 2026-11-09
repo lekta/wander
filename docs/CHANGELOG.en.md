@@ -29,6 +29,10 @@ follow [SemVer](https://semver.org/). Dates in ISO format.
 - **Progress on the taskbar button.**
 - **Folder census** — types and subfolders by weight, click to filter or
   open; zip archives too.
+- **Folder thumbnails** — show the files inside, of different kinds:
+  pictures, tracks, models, programs.
+- **Placeholders** while a thumbnail is made: a folder's outline, a file's
+  type icon.
 
 ### Changed
 - **Windows and macOS clutter** (`desktop.ini`, `Thumbs.db`, `.DS_Store`,
@@ -48,6 +52,8 @@ follow [SemVer](https://semver.org/). Dates in ISO format.
   over the cell, fresh after a commit.
 - **Moving to another drive** that fails on a sidecar: the photo goes back
   with a progress bar, Cancel works.
+- **Thumbnails came all at once** while the preview's spinner turned — now
+  each as it's ready; a track's tile is 2–3 times faster.
 - **Copying from a phone**: a dropped connection while counting pauses the
   copy instead of failing it.
 - **One failed file from a phone** no longer stops the folder.

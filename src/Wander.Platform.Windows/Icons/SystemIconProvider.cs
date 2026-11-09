@@ -167,11 +167,12 @@ public sealed class SystemIconProvider : IIconProvider {
 
     public SystemIconProvider(ThumbnailDiskCache? disk = null) {
         _disk = disk;
-        _folders = new FolderPictures((file, size) => GetIcon(file, size), KeepsPicture, disk);
+        _folders = new FolderPictures(
+            (file, size, cancel) => GetIcon(file, size, default, cancel), file => GetIcon(file, IconSize.Normal), KeepsPicture, disk);
     }
 
 
-    public byte[]? GetIcon(string path, IconSize size, FolderLook look = default) {
+    public byte[]? GetIcon(string path, IconSize size, FolderLook look = default, CancellationToken cancel = default) {
         if (string.IsNullOrEmpty(path)) {
             return null;
         }
@@ -203,8 +204,12 @@ public sealed class SystemIconProvider : IIconProvider {
             byte[]? own;
             try {
                 using (PerfLog.Measure("bg.folder")) {
-                    own = _folders.Render(path, size, look, size == IconSize.Large ? _thumbSide : MediumSize);
+                    own = _folders.Render(path, size, look, size == IconSize.Large ? _thumbSide : MediumSize, cancel);
                 }
+            } catch (OperationCanceledException) {
+                // Nobody looks at it any more: neither the shell's picture
+                // nor a "no picture" to remember.
+                return null;
             } catch {
                 // Drawn by the shell then, as before Wander drew folders.
                 own = null;
@@ -240,7 +245,7 @@ public sealed class SystemIconProvider : IIconProvider {
             byte[]? bytes;
             var asked = System.Diagnostics.Stopwatch.StartNew();
             using (PerfLog.Measure("bg.thumb-shell")) {
-                bytes = LoadIcon(path, size, isFolder, _thumbSide);
+                bytes = LoadIcon(path, size, isFolder, _thumbSide, cancel);
             }
             // The PERF line says a shell call was slow; only this one says
             // which file. A single extraction can take seconds (a dead
@@ -274,6 +279,22 @@ public sealed class SystemIconProvider : IIconProvider {
             }
             return bytes;
         } catch {
+            return null;
+        }
+    }
+
+
+    public byte[]? GetSilhouette(string path, IconSize size, FolderLook look = default, CancellationToken cancel = default) {
+        if (string.IsNullOrEmpty(path) || size is not (IconSize.Medium or IconSize.Large) || !System.IO.Directory.Exists(path)) {
+            return null;
+        }
+
+        try {
+            using (PerfLog.Measure("bg.folder-silhouette")) {
+                return _folders.Silhouette(path, size, look, size == IconSize.Large ? _thumbSide : MediumSize, cancel);
+            }
+        } catch {
+            // Cosmetic and short-lived: the real picture is on its way anyway.
             return null;
         }
     }
@@ -678,7 +699,7 @@ public sealed class SystemIconProvider : IIconProvider {
         }
     }
 
-    private static byte[]? LoadIcon(string path, IconSize size, bool isFolder, int thumbSide) {
+    private static byte[]? LoadIcon(string path, IconSize size, bool isFolder, int thumbSide, CancellationToken cancel) {
         // shell:RecycleBinFolder and similar sentinels can't go through
         // SHGetFileInfo by path — those calls just fail because there's
         // no file. Route them through PIDL-based icon lookup instead.
@@ -704,8 +725,8 @@ public sealed class SystemIconProvider : IIconProvider {
         }
 
         return size switch {
-            IconSize.Large => LoadJumboImage(path, thumbSide),
-            IconSize.Medium => LoadMediumImage(path),
+            IconSize.Large => LoadJumboImage(path, thumbSide, cancel),
+            IconSize.Medium => LoadMediumImage(path, cancel),
             _ => LoadShellIcon(path, size),
         };
     }
@@ -789,13 +810,13 @@ public sealed class SystemIconProvider : IIconProvider {
     /// arrow in itself.
     /// </para>
     /// </summary>
-    private static byte[]? LoadMediumImage(string path) {
+    private static byte[]? LoadMediumImage(string path, CancellationToken cancel) {
         // A picture inside an archive: unpacked and drawn; the
         // icon below when it cannot be.
         if (ArchiveThumbnail.Supports(path)) {
             return ArchiveThumbnail.Render(path, MediumSize) ?? LoadShellIcon(path, IconSize.Normal);
         }
-        if (TryRenderBookCover(path, MediumSize) is { } cover) {
+        if (TryRenderBookCover(path, MediumSize, cancel) is { } cover) {
             return cover;
         }
 
@@ -805,7 +826,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // the cover branch above looked at the .lnk itself and found none
         // there, so the target has to be asked in its place.
         string? linkTarget = ExistingLinkTarget(path);
-        if (linkTarget is not null && TryRenderLinkedCover(linkTarget, path, MediumSize) is { } linkedCover) {
+        if (linkTarget is not null && TryRenderLinkedCover(linkTarget, path, MediumSize, cancel) is { } linkedCover) {
             return linkedCover;
         }
 
@@ -871,8 +892,8 @@ public sealed class SystemIconProvider : IIconProvider {
     /// on a borrowed thumbnail: the plate came from the target, and
     /// nothing in it says "shortcut".
     /// </summary>
-    private static byte[]? TryRenderLinkedCover(string target, string linkPath, int side) {
-        using Bitmap? plate = RenderCoverPlate(target, side);
+    private static byte[]? TryRenderLinkedCover(string target, string linkPath, int side, CancellationToken cancel) {
+        using Bitmap? plate = RenderCoverPlate(target, side, cancel);
         if (plate is null) {
             return null;
         }
@@ -941,7 +962,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// the file.
     /// </para>
     /// </summary>
-    private static byte[]? TryRenderBookCover(string path, int side) {
+    private static byte[]? TryRenderBookCover(string path, int side, CancellationToken cancel) {
         // A model is not a book: drawn on transparency, no plate.
         if (ModelThumbnail.Supports(path)) {
             using (PerfLog.Measure("bg.model")) {
@@ -949,7 +970,7 @@ public sealed class SystemIconProvider : IIconProvider {
             }
         }
 
-        using Bitmap? plate = RenderCoverPlate(path, side);
+        using Bitmap? plate = RenderCoverPlate(path, side, cancel);
         if (plate is null) {
             return null;
         }
@@ -964,7 +985,7 @@ public sealed class SystemIconProvider : IIconProvider {
     /// The framed cover as a bitmap the caller owns - encoded as it is
     /// for the file's own tile, or with a shortcut arrow drawn on first.
     /// </summary>
-    private static Bitmap? RenderCoverPlate(string path, int side) {
+    private static Bitmap? RenderCoverPlate(string path, int side, CancellationToken cancel) {
         if (!HasOwnCover(path)) {
             return null;
         }
@@ -995,7 +1016,7 @@ public sealed class SystemIconProvider : IIconProvider {
         Waveform? shape = null;
         if (AudioCover.Supports(path)) {
             using (PerfLog.Measure("bg.track-shape")) {
-                shape = WaveformThumbnail.Shape(path);
+                shape = WaveformThumbnail.Shape(path, cancel);
             }
         }
         if (bytes is null) {
@@ -1339,7 +1360,7 @@ public sealed class SystemIconProvider : IIconProvider {
     // ------------------------------------------------------------------
 
     /// <param name="side">Pixels of a thumbnail - of a picture, a cover, a page; the icon of a file without one stays 256 (the shell's jumbo list).</param>
-    private static byte[]? LoadJumboImage(string path, int side) {
+    private static byte[]? LoadJumboImage(string path, int side, CancellationToken cancel) {
         // Routing: files with a real thumbnail provider (images, videos, PDFs,
         // folders with content peek) go through IShellItemImageFactory so we
         // get true thumbnails. Everything else — text, code, .exe, .lnk — uses
@@ -1360,7 +1381,7 @@ public sealed class SystemIconProvider : IIconProvider {
         if (ArchiveThumbnail.Supports(path) && ArchiveThumbnail.Render(path, side) is { } entry) {
             return entry;
         }
-        if (TryRenderBookCover(path, side) is { } cover) {
+        if (TryRenderBookCover(path, side, cancel) is { } cover) {
             return cover;
         }
 
@@ -1369,7 +1390,7 @@ public sealed class SystemIconProvider : IIconProvider {
         // a book gets the book's cover, arrow included - the cover branch
         // above only knows the .lnk itself.
         string? linkTarget = ExistingLinkTarget(path);
-        if (linkTarget is not null && TryRenderLinkedCover(linkTarget, path, side) is { } linkedCover) {
+        if (linkTarget is not null && TryRenderLinkedCover(linkTarget, path, side, cancel) is { } linkedCover) {
             return linkedCover;
         }
 

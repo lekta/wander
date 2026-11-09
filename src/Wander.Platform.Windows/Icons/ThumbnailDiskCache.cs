@@ -145,8 +145,13 @@ public sealed class ThumbnailDiskCache {
     /// v21 (2026-11-06): a program's icon and a model go into a folder bare,
     /// with a shadow - v20 folders hold them on a card of the theme.
     /// </para>
+    ///
+    /// <para>
+    /// v22 (2026-11-09): a track's shape on its tile is read from windows
+    /// along it (<c>WaveformSketch</c>), not from all of it.
+    /// </para>
     /// </summary>
-    private const int Generation = 21;
+    private const int Generation = 22;
 
     private readonly string _directory;
     private readonly ILogger _log;

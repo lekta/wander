@@ -37,6 +37,9 @@
          (decision 2026-10-09). -->
     <SolidColorBrush x:Key="GalleryLightBackground" Color="White"/>
 
+    <!-- A file's plate while its picture is made (second fitting, 2026-11-09). -->
+    <SolidColorBrush x:Key="PendingPlate" Color="#E6E9EE"/>
+
     <!-- A field that shows a value the user cannot edit. -->
     <SolidColorBrush x:Key="ReadOnlyFieldBackground" Color="#F7F7F7"/>
 

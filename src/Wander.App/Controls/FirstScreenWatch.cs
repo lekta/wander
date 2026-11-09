@@ -34,12 +34,19 @@ public sealed class FirstScreenWatch {
     private readonly Stopwatch _clock;
     private readonly string _path;
     private readonly ILogger _log;
+
+    /// <summary>Where the awaited icons spent their time - see <see cref="IconLoadTimes"/>.</summary>
+    private readonly Waits _waits = new();
+
+    /// <summary>When the watch was armed, on the navigation's clock: what the listing and its layout took.</summary>
+    private readonly long _armedMs;
     private int _gone;
 
 
     private FirstScreenWatch(string path, Stopwatch clock, IReadOnlyList<AsyncIcon> visible, ILogger log) {
         _path = path;
         _clock = clock;
+        _armedMs = clock.ElapsedMilliseconds;
         _log = log;
         _total = visible.Count;
         _pending = new HashSet<AsyncIcon>();
@@ -80,7 +87,12 @@ public sealed class FirstScreenWatch {
 
 
     private void OnPainted(AsyncIcon icon) {
-        if (_pending.Remove(icon) && _pending.Count == 0) {
+        if (!_pending.Remove(icon)) {
+            return;
+        }
+
+        _waits.Add(icon.LastLoad);
+        if (_pending.Count == 0) {
             Close(painted: true);
         }
     }
@@ -113,10 +125,43 @@ public sealed class FirstScreenWatch {
         long ms = _clock.ElapsedMilliseconds;
         if (painted) {
             string gone = _gone > 0 ? $", {_gone} scrolled away" : "";
-            _log.Info($"First screen painted in {ms} ms: {_total} icons, {_awaited} awaited{gone} - {_path}");
+            _log.Info($"First screen painted in {ms} ms: {_total} icons, {_awaited} awaited{gone}; armed at {_armedMs} ms{_waits} - {_path}");
             PerfLog.Note("ui.first-screen", ms);
         } else {
             _log.Info($"First screen abandoned after {ms} ms: {_pending.Count} of {_total} icons still missing - {_path}");
+        }
+    }
+
+
+    /// <summary>
+    /// The four waits of the awaited icons, summed
+    /// and at their worst - written into the line as
+    /// <c>; waits sum/max ms: layout a/b, gate c/d, work e/f, apply g/h (n)</c>.
+    /// </summary>
+    private sealed class Waits {
+        private readonly double[] _sum = new double[4];
+        private readonly double[] _max = new double[4];
+        private int _count;
+
+
+        public void Add(IconLoadTimes? times) {
+            if (times is not { IsComplete: true }) {
+                return;
+            }
+
+            double[] each = { times.LayoutMs, times.GateMs, times.WorkMs, times.ApplyMs };
+            for (int i = 0; i < each.Length; i++) {
+                _sum[i] += each[i];
+                _max[i] = Math.Max(_max[i], each[i]);
+            }
+            _count++;
+        }
+
+        public override string ToString() {
+            return _count == 0
+                ? ""
+                : FormattableString.Invariant(
+                    $"; waits sum/max ms: layout {_sum[0]:F0}/{_max[0]:F0}, gate {_sum[1]:F0}/{_max[1]:F0}, work {_sum[2]:F0}/{_max[2]:F0}, apply {_sum[3]:F0}/{_max[3]:F0} ({_count})");
         }
     }
 }

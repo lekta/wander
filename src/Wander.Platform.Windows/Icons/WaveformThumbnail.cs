@@ -30,9 +30,13 @@ internal static class WaveformThumbnail {
     private static readonly Color _coverPeak = Color.FromArgb(150, 255, 255, 255);
 
 
-    /// <summary>The shape to draw on the tile, or null - too long, or not decodable.</summary>
-    public static Waveform? Shape(string path) {
-        return ServiceLocator.TryGet<IWaveformSource>()?.Read(path, Waveform.ListLimit, CancellationToken.None);
+    /// <summary>
+    /// The shape to draw on the tile, or null - too long, or not decodable:
+    /// the quick one from windows along the track (<see cref="WaveformSketch"/>),
+    /// given up when the tile is no longer wanted.
+    /// </summary>
+    public static Waveform? Shape(string path, CancellationToken cancel) {
+        return ServiceLocator.TryGet<IWaveformSource>()?.Sketch(path, Waveform.ListLimit, cancel);
     }
 
     /// <summary>A white page <paramref name="side"/> square: the shape, and under it the band.</summary>
