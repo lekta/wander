@@ -29,7 +29,7 @@ if /i "%MODE%"=="format" (
 
 rem  The window harness: minutes rather than seconds, because it generates a
 rem  sandbox and drives the real application through it. Deliberately not
-rem  part of the ordinary check - see docs/QA.md, "Автоматизация".
+rem  part of the ordinary check - see docs/qa_harness.md, "Автоматизация".
 if /i "%MODE%"=="qa" (
     echo === build ===
     %DOTNET% build %SLN% --nologo
@@ -95,7 +95,7 @@ echo.
 echo === tests ===
 rem Through a script rather than `dotnet test` directly: same command, plus
 rem one line per run in artifacts\test-runs.tsv - passed of total and the
-rem time it took. The harness writes the same file (docs/QA.md).
+rem time it took. The harness writes the same file (docs/qa_harness.md).
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run-tests.ps1"
 if errorlevel 1 exit /b 1
 

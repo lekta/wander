@@ -6,9 +6,14 @@ using Wander.Core.Preview;
 
 namespace Wander.Core.Listing;
 
-/// <summary>The kind of file a folder's own picture shows one of; <see cref="None"/> for what it never shows.</summary>
+/// <summary>
+/// The kind of file a folder's own picture shows one of; <see cref="None"/>
+/// for what it never shows on its own merits, <see cref="Type"/> for such a
+/// file shown by its type's icon when the folder holds nothing else.
+/// </summary>
 public enum FolderContent {
     None,
+    Type,
     Program,
     Picture,
     Video,
@@ -53,6 +58,13 @@ public sealed record FolderPick(string Path, FolderItem Item, FolderContent Cont
 /// order read: on NTFS the first by name, on a FAT card the first written.
 /// A folder with nothing of its own is shown by its subfolders, one file
 /// from each, a level down and no deeper.
+/// </para>
+///
+/// <para>
+/// A folder whose files - its own, else its subfolders' - are all of the
+/// kinds never shown (code, settings, libraries; decision 2026-11-09) is
+/// not drawn empty: it shows their types, the most frequent first, a card
+/// with the type's icon for each.
 /// </para>
 /// </summary>
 public static class FolderPicture {
@@ -207,6 +219,7 @@ public static class FolderPicture {
         }
 
         var picks = new List<FolderPick>(cards);
+        var typed = new List<FolderPick>(cards);
         int tried = 0;
         foreach (var sub in Rank(read.Folders, read.Complete)) {
             if (picks.Count >= cards || tried >= MaxSubfolders) {
@@ -223,10 +236,44 @@ public static class FolderPicture {
             }
             if (Pick(path, inside.Files, inside.Complete, 1, companions) is [var best]) {
                 picks.Add(best with { Inside = true });
+            } else if (typed.Count < cards && Types(path, inside.Files, inside.Complete, 1, companions) is [var type]) {
+                typed.Add(type with { Inside = true });
             }
         }
+        if (picks.Count > 0) {
+            return picks;
+        }
 
-        return picks;
+        var types = Types(folder, read.Files, read.Complete, cards, companions);
+
+        return types.Count > 0 ? types : typed;
+    }
+
+
+    /// <summary>
+    /// The types of the folder's own files, for a folder with nothing to
+    /// show: the most frequent extension first, a tie in the files' rank;
+    /// each by its best file, as a <see cref="FolderContent.Type"/>.
+    /// </summary>
+    public static IReadOnlyList<FolderPick> Types(
+        string folder, IReadOnlyList<FolderItem> files, bool complete, int cards, CompanionResolver companions) {
+        var groups = new Dictionary<string, (FolderItem Best, int Count, int Order)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in Rank(files, complete)) {
+            if (!IsOwn(file, companions)) {
+                continue;
+            }
+
+            string ext = Path.GetExtension(file.Name);
+            groups[ext] = groups.TryGetValue(ext, out var group)
+                ? group with { Count = group.Count + 1 }
+                : (file, 1, groups.Count);
+        }
+
+        return groups.Values
+            .OrderByDescending(g => g.Count).ThenBy(g => g.Order)
+            .Take(Math.Max(0, cards))
+            .Select(g => new FolderPick(Path.Combine(folder, g.Best.Name), g.Best, FolderContent.Type))
+            .ToList();
     }
 
 

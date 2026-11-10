@@ -9,60 +9,25 @@ above its first heading, opens its release notes on GitHub.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [SemVer](https://semver.org/). Dates in ISO format.
 
-## [Unreleased]
+## [0.6.1-beta] — 2026-11-09
+
+Folder thumbnails, sound previews, text compare via git, the delete question as a table, textures on 3D models, a bookmarks page
 
 ### Added
-- **Text thumbnails** — `.txt`, `.log`, `.md`: a page with words as bars,
-  the heading stands out.
-- **Patches** `.diff` / `.patch` — lines on green and red.
-- **Compare two files** — in the menu with two selected; texts show the
-  differences (needs git).
-- **Frozen zoom** — click a zoomed picture or video: the spot stays put, the
-  cursor is free.
-- **Waveforms** for sound — in the panel, on tiles, as the Sound column;
-  click the wave to play from there, **▶ on the file** plays without
-  selecting it; several tracks show as a stack.
-- **Textures on 3D models** (OBJ, glTF, FBX) and **Blender** `.blend` /
-  `.blend1`.
-- **Folder sizes in the Details view** — in the background, sort by size.
-- **Bookmarks page** — click "Bookmarks": hidden ones, order, names.
-- **Progress on the taskbar button.**
-- **Folder census** — types and subfolders by weight, click to filter or
-  open; zip archives too.
-- **Folder thumbnails** — show the files inside, of different kinds:
-  pictures, tracks, models, programs.
-- **Placeholders** while a thumbnail is made: a folder's outline, a file's
-  type icon.
+- **Folder thumbnails** with cards of the files inside
+- **Preview and thumbnail** for sound
+- **Textures on 3D models** (OBJ, glTF, FBX) and **Blender** `.blend`
+- **Compare text files** via git
+- **Bookmarks page**, with settings for each
 
 ### Changed
-- **Windows and macOS clutter** (`desktop.ini`, `Thumbs.db`, `.DS_Store`,
-  `._*`, `__MACOSX`) is hidden in every folder and archive — the System
-  folders and files box.
-- **Details view** — Name takes the free space, no sideways scrolling;
-  column widths are remembered.
-- **Extracting from zip** — with bytes, speed and time left.
-- **The delete question is a table**: every name, folder sizes and
-  contents, companions, read-only files — in one window, themed; deleting
-  for good takes a click.
+- **The delete question is a table**, with the details
+- **Extracting from zip** — with bytes, speed and time left
 
 ### Fixed
 - **Crash on `.doc`.**
-- **Zip with long names inside** (cloud.mail.ru) looked empty.
-- **TortoiseGit badges** in Large icons and the gallery — their own size,
-  over the cell, fresh after a commit.
-- **Moving to another drive** that fails on a sidecar: the photo goes back
-  with a progress bar, Cancel works.
-- **Thumbnails came all at once** while the preview's spinner turned — now
-  each as it's ready; a track's tile is 2–3 times faster.
-- **Copying from a phone**: a dropped connection while counting pauses the
-  copy instead of failing it.
-- **One failed file from a phone** no longer stops the folder.
-- **Date format in batch rename**: `[D:mm-dd]` is month and day; case
-  doesn't matter, `m` next to the hours means minutes.
-- **Minor**: a folder after extraction gets its tree arrow without `F5`;
-  drops onto search results go only into folders; arrows on archive
-  folders only where there are subfolders; `/raw` in the type search; the
-  rating plate in Icons covered the picture.
+- **Zip with long names inside** (cloud.mail.ru) looked empty
+- **Date format**: `[D:mm-dd]` is month and day; `m` next to the hours means minutes
 
 ## [0.6.0-beta] — 2026-10-26
 
@@ -137,4 +102,5 @@ follow [SemVer](https://semver.org/). Dates in ISO format.
   sharpness score after `Alt`; "no space" on FAT with space left; an
   unavailable standard bookmark is gray.
 
+[0.6.1-beta]: https://github.com/lekta/wander/releases/tag/v0.6.1
 [0.6.0-beta]: https://github.com/lekta/wander/releases/tag/v0.6.0

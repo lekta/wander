@@ -94,6 +94,9 @@ foreach ($single in $singles) {
         Add-Code $lit.Groups[1].Value $single.Label
     }
 }
+# Built rather than listed: MeshFile.BlenderBackups() makes .blend1 .. .blend32,
+# the page names the first one.
+Add-Code '.blend1' 'MeshFile.BlenderBackups'
 
 # The page: from its heading to the next ## or ### (its own #### stay in).
 $guide = Get-Content -Raw -Encoding UTF8 (Join-Path $Root 'docs\GUIDE.md')

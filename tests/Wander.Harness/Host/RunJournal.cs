@@ -10,7 +10,7 @@ namespace Wander.Harness.Host;
 /// batch writes here - the Core tests through <c>tools\run-tests.ps1</c>,
 /// <c>selfcheck</c> and every scenario through this class - so the file is
 /// the one place to read a trend from. Tab-separated, header on first
-/// write, appended and never rewritten; docs/QA.md, the batch-journal section.
+/// write, appended and never rewritten; docs/qa_harness.md, the batch-journal section.
 /// </summary>
 public static class RunJournal {
     public const string FileName = "test-runs.tsv";

@@ -833,5 +833,5 @@ makernote (`CanonAfInfo`, поворот — `AfGeometry`), но человек
 4. Миниатюра — свой отрисовщик в Platform (ветка `HasOwnCover`) и
    `ThumbnailDiskCache.Generation` вверх без оглядки.
 5. Доки: GUIDE — таблица форматов (`check-formats.ps1`); DONE «Панель
-   просмотра»; фикстура в `tests/Fixtures` и `selfcheck` харнесса (QA);
+   просмотра»; фикстура в `tests/Fixtures` и `selfcheck` харнесса (qa_harness);
    сюда — только новый механизм или ловушка.

@@ -150,8 +150,13 @@ public sealed class ThumbnailDiskCache {
     /// v22 (2026-11-09): a track's shape on its tile is read from windows
     /// along it (<c>WaveformSketch</c>), not from all of it.
     /// </para>
+    ///
+    /// <para>
+    /// v23 (2026-11-09): a folder of only code, settings and the like shows
+    /// its files' types instead of being drawn empty.
+    /// </para>
     /// </summary>
-    private const int Generation = 22;
+    private const int Generation = 23;
 
     private readonly string _directory;
     private readonly ILogger _log;

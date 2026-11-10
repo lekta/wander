@@ -99,7 +99,9 @@
     // keeps the .wander-tmp to itself and shows the file once it is named.
     { "do": "fs", "op": "create", "path": "{sandbox}\\attrs\\copies\\clip.mov.wander-tmp", "bytes": 16 },
     { "do": "fs", "op": "rename", "path": "{sandbox}\\attrs\\copies\\clip.mov.wander-tmp", "to": "clip.mov" },
-    { "do": "wait-idle" },
+    // Longer than the watcher's 500 ms tick: 400 ms of a quiet log can
+    // come before it.
+    { "do": "wait-idle", "quietMs": 800 },
     { "do": "assert-entries", "contains": [ "clip.mov" ], "absent": [ "clip.mov.wander-tmp" ] },
     { "do": "navigate", "path": "{sandbox}\\attrs" },
     { "do": "fs", "op": "delete", "path": "{sandbox}\\attrs\\copies" },

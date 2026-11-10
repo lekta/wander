@@ -206,6 +206,40 @@ public class FolderPictureTests {
     }
 
 
+    /// <summary>The <c>mono\data</c> case, decision 2026-11-09: code and settings only - their types, the most frequent first.</summary>
+    [Fact]
+    public void NothingWorthShowing_ShowsTheTypes_MostFrequentFirst() {
+        var read = Read(
+            Item("a.config", age: 1), Item("Makefile.am", age: 2), Item("b.py", age: 3), Item("c.py", age: 4),
+            Item("x.aspx", age: 5), Item("d.config", age: 6), Item("e.py", age: 7), Item("desktop.ini"), Item(".hide", hidden: true));
+
+        var picks = FolderPicture.Choose(Folder, read, 3, CompanionResolver.Default, _ => throw new InvalidOperationException());
+
+        Assert.Equal(new[] { "b.py", "a.config", "Makefile.am" }, Names(picks));
+        Assert.All(picks, p => Assert.Equal(FolderContent.Type, p.Content));
+        Assert.All(picks, p => Assert.False(p.Inside));
+    }
+
+    [Fact]
+    public void TypesComeLast_AfterWhatTheSubfoldersShow_ThenFromTheSubfolders() {
+        var withPhotos = new FolderRead(new[] { Item("notes.cs") }, new[] { Item("photos") }, Complete: true);
+        var codeOnly = new FolderRead(Array.Empty<FolderItem>(), new[] { Item("gdb", age: 1), Item("lldb", age: 2), Item("empty") }, Complete: true);
+        var inside = new Dictionary<string, FolderRead> {
+            [Folder + @"\photos"] = Read(Item("x.jpg")),
+            [Folder + @"\gdb"] = Read(Item("mono-gdb.py")),
+            [Folder + @"\lldb"] = Read(Item("mono.py"), Item("monobt.py")),
+            [Folder + @"\empty"] = Read(),
+        };
+
+        var photos = FolderPicture.Choose(Folder, withPhotos, 3, CompanionResolver.Default, path => inside[path]);
+        var code = FolderPicture.Choose(Folder, codeOnly, 3, CompanionResolver.Default, path => inside[path]);
+
+        Assert.Equal(new[] { "x.jpg" }, Names(photos));
+        Assert.Equal(new[] { "mono-gdb.py", "mono.py" }, Names(code));
+        Assert.All(code, p => Assert.True(p.Inside && p.Content == FolderContent.Type));
+    }
+
+
     [Fact]
     public void TheKey_ChangesWithAShownFile_AndWithTheLook() {
         var shown = Pick(new[] { Item("a.png", age: 1), Item("b.png", age: 2) }, cards: 3);

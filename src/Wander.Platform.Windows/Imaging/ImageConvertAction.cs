@@ -4,6 +4,7 @@ using Wander.Core.Icons;
 using Wander.Core.Imaging;
 using Wander.Core.Localization;
 using Wander.Core.Logging;
+using Wander.Platform.Windows.Icons;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
@@ -43,6 +44,13 @@ namespace Wander.Platform.Windows.Imaging;
 /// A RAW file goes to the system decoder first; when that cannot open it,
 /// the JPEG preview inside the container is converted instead - the same
 /// fallback thumbnails use - with the container's own metadata.
+/// </para>
+///
+/// <para>
+/// TGA and Photoshop files, which Windows has no codec for, are decoded by
+/// Core's own decoders when WIC refuses them (<see cref="TgaDecoder"/>,
+/// <see cref="PsdDecoder"/> - the flattened picture), as their thumbnails
+/// are.
 /// </para>
 /// </summary>
 public sealed class ImageConvertAction : IBuiltinAction {
@@ -97,11 +105,46 @@ public sealed class ImageConvertAction : IBuiltinAction {
             _log.Info($"image-convert: no system decoder for {input} ({ex.Message}), converting its preview");
 
             return await ConvertPreviewAsync(file, shot, orientation, options, ct).ConfigureAwait(false);
+        } catch (Exception ex) when (TgaThumbnail.Supports(input) || PsdThumbnail.Supports(input)) {
+            _log.Info($"image-convert: no system decoder for {input} ({ex.Message}), decoding it with Wander's own");
+
+            return await ConvertOwnDecodedAsync(file, input, shot, orientation, options, ct).ConfigureAwait(false);
         } catch (Exception ex) {
             throw new NotSupportedException(Text.Get("ImageConvertNoDecoder"), ex);
         }
 
         return await EncodeAsync(decoder, ContainerOf(decoder), shot, orientation, options, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A TGA or a Photoshop file: decoded by Core, then handed to the same
+    /// encoding path as a lossless PNG in memory. A PSD saved without its
+    /// flattened picture has nothing to convert.
+    /// </summary>
+    private async Task<byte[]> ConvertOwnDecodedAsync(
+        FileStream file, string input, ImageMetadata? shot, int orientation, ImageConvertOptions options, CancellationToken ct) {
+
+        file.Position = 0;
+        BgraImage? image;
+        if (TgaThumbnail.Supports(input)) {
+            var bytes = new byte[file.Length];
+            file.ReadExactly(bytes);
+            image = TgaDecoder.Decode(bytes);
+        } else {
+            image = PsdDecoder.Decode(file)?.Composite;
+        }
+        if (image is null) {
+            throw new NotSupportedException(Text.Get("ImageConvertNoDecoder"));
+        }
+        ct.ThrowIfCancellationRequested();
+
+        byte[] png = await TgaThumbnail.EncodePngAsync(image, Math.Max(image.Width, image.Height)).ConfigureAwait(false);
+        using var lossless = new InMemoryRandomAccessStream();
+        await lossless.WriteAsync(png.AsBuffer());
+        lossless.Seek(0);
+        var decoder = await BitmapDecoder.CreateAsync(lossless);
+
+        return await EncodeAsync(decoder, "png", shot, orientation, options, ct).ConfigureAwait(false);
     }
 
     /// <summary>

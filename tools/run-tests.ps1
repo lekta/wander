@@ -7,7 +7,7 @@
     the console exactly as before; afterwards one line goes to
     artifacts\test-runs.tsv - when, how many passed out of how many, how long
     it took, ok or fail. The harness (`selfcheck`, `run`) writes the same file
-    in the same format (RunJournal.cs); docs/QA.md, the batch-journal section.
+    in the same format (RunJournal.cs); docs/qa_harness.md, the batch-journal section.
 
     The counts come from the VSTest summary line
     ("Passed!  - Failed: 0, Passed: 1043, Skipped: 0, Total: 1043, ...");

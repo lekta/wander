@@ -201,11 +201,22 @@ public partial class SettingsWindow : Window {
             return;
         }
 
-        ServiceLocator.Get<IIconProvider>().ClearCache();
         // Decoded copies live a tier above the provider's; leaving them
         // would make the button look like it did nothing.
         Controls.IconImageCache.Clear();
-        _ = RefreshCacheStatusAsync(vm);
+        _ = ClearThumbnailsAsync(vm);
+    }
+
+
+    /// <summary>
+    /// The provider's clear deletes the disk cache file by file - 620 ms on
+    /// the UI thread in a live session (2026-11-09) - so it runs on the
+    /// pool, and the size is read once it is done.
+    /// </summary>
+    private static async Task ClearThumbnailsAsync(SettingsViewModel vm) {
+        var provider = ServiceLocator.Get<IIconProvider>();
+        await Task.Run(provider.ClearCache);
+        await RefreshCacheStatusAsync(vm);
     }
 
 

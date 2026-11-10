@@ -280,6 +280,11 @@ internal static class FolderThumbnail {
 
                 return;
             }
+            if (card.Content == FolderContent.Type) {
+                SilhouetteCard(card.Picture, box, Color.White);
+
+                return;
+            }
 
             using var shape = Frame(box, out var inner);
             _g.FillPath(Brushes.White, shape);
@@ -288,8 +293,13 @@ internal static class FolderThumbnail {
 
         /// <summary>A card of the silhouette: the same frame, solid inside, its type's icon in the middle of what the flap leaves of it.</summary>
         public void SilhouetteCard(Bitmap? type, RectangleF box) {
+            SilhouetteCard(type, box, _silhouetteCard);
+        }
+
+        /// <summary>A card of the silhouette's layout on <paramref name="fill"/>; on white it is a file shown by its type for good.</summary>
+        public void SilhouetteCard(Bitmap? type, RectangleF box, Color fill) {
             using (var shape = Frame(box, out _))
-            using (var brush = new SolidBrush(_silhouetteCard)) {
+            using (var brush = new SolidBrush(fill)) {
                 _g.FillPath(brush, shape);
             }
 
@@ -302,6 +312,10 @@ internal static class FolderThumbnail {
         public void Cell(FolderCard card, RectangleF cell) {
             if (IsBare(card.Content)) {
                 Bare(card.Picture, cell);
+            } else if (card.Content == FolderContent.Type) {
+                using var shape = Rounded(cell, Px(0.025f));
+                _g.FillPath(Brushes.White, shape);
+                TypeIcon(card.Picture, cell);
             } else {
                 using var shape = Rounded(cell, Px(0.025f));
                 if (IsPage(card.Content)) {

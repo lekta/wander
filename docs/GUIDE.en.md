@@ -105,6 +105,7 @@ You set the working folder in [“Settings” → “Folders and bookmarks”](#
 
 The Folders pane on the left holds two folder trees: “Bookmarks” at the top and “Computer” with your drives, phones and cameras below.
 Expanded branches stay expanded as you move around and after a restart.
+Click the word in a tree's header to open its page in the file area: all bookmarks, or the drives.
 
 Both trees hide and come back together: use the ![Folders pane](icons/folders-pane.svg) button to the left of “←”, “View” → “Folders pane”, or `Ctrl+B`; the width is remembered.
 Each tree collapses with the triangle in its header: a collapsed “Computer” moves to the bottom and gives its space to the bookmarks.
@@ -125,15 +126,18 @@ You can't collapse both at once: collapsing one expands the other.
 - **On a USB drive, phone or camera**: you can bookmark a folder on an external device too, by dragging it to the “+” zone the same way.
   A bookmark on a USB drive turns gray while the drive is unplugged, and a bookmark to a folder on a phone or camera shows up with the device's icon while the device is connected.
 - **Reorder or remove**: use the `⋯` button on the bookmark's row or right-click it; `Ctrl+↑` and `Ctrl+↓` move a bookmark up and down.
-- **Your own name**: `⋯` → “Rename bookmark…”; an empty name brings back the folder's name.
+- **Your own name**: `⋯` → “Rename bookmark…” or `F2` on the bookmark's row; an empty name brings back the folder's name.
 - **Standard bookmarks** are at the top: Downloads, Documents, Pictures, Recycle Bin.
   Desktop, Music and Videos can be turned on in [“Settings” → “Folders and bookmarks”](#folders-and-bookmarks).
+- **All bookmarks at once**: click the word “Bookmarks” in the pane's header to open their page in the file area.
+  It also lists hidden bookmarks and bookmarks to an unplugged device or a missing folder, with the reason.
+  The checkbox shows or hides a bookmark in the pane, `F2` renames it, `Ctrl+↑` and `Ctrl+↓` move it, and `Delete` removes your own bookmark or hides a standard one.
 
 A bookmark to a folder that no longer exists turns gray and italic; clicking it offers to point to the new location or remove the bookmark.
 A bookmark on a network drive that's turned off turns gray the same way, standard ones included (“Documents” on a network folder); once the drive is back, the bookmark is normal again.
 
 `Delete` on a bookmark you added asks what to remove: the bookmark or the folder itself (to the Recycle Bin).
-On a standard bookmark, `Delete` leaves the folder alone and only removes the bookmark from the pane; you can bring it back in the same settings.
+On a standard bookmark, `Delete` leaves the folder alone and only removes the bookmark from the pane; you can bring it back on the bookmarks page or in the same settings.
 
 #### Computer
 
@@ -207,15 +211,15 @@ The area has a toolbar with a search box; in a folder with rated photos, it also
 - [“Gallery”](#gallery): a view for photos, with ratings and review helpers.
 
 **Selection** works as usual: click, `Ctrl`+click, `Shift`+click, dragging a rectangle across empty space, `Ctrl+A`; typing the first letters of a name jumps to the file.
-The right side of the status bar shows how many items are selected and how much space they take; folder sizes are calculated by the Preview pane.
+The right side of the status bar shows how many items are selected and how much space they take; folder sizes are calculated by the Preview pane, and in Details they're shown in the “Size” column.
 
 The selected file doesn't leave the screen: when new files appear or the filter, sort order or window size changes, it stays in view.
 
 **What to show** is set in [“Settings” → “File list”](#file-list):
 
-- **hidden files** aren't shown by default, and when turned on, they're drawn paler; together with them, you can show protected operating system files such as `desktop.ini`;
-- **system folders and files at drive roots** (`$RECYCLE.BIN`, `System Volume Information`, `pagefile.sys`) have their own checkbox: they stay hidden even when hidden and system files are shown.
-  There's no reason to turn it on: you can't open these folders anyway, and they only clutter the list;
+- **hidden files** aren't shown by default, and when turned on, they're drawn paler; together with them, you can show protected operating system files such as `NTUSER.DAT`;
+- **system folders and files** have their own checkbox: the drive roots (`$RECYCLE.BIN`, `System Volume Information`, `pagefile.sys`) and the Windows and macOS clutter in any folder and archive (`desktop.ini`, `Thumbs.db`, `.DS_Store`, `._*`, `__MACOSX`).
+  They stay hidden even when hidden and system files are shown; there's no reason to turn the checkbox on: these files are of no use and only clutter the list;
 - **a file and its companions** can be shown as one item; learn more on the [“Companion files”](#companion-files) page;
 - **changes from other programs** show up right away or only on `F5`.
 
@@ -236,6 +240,11 @@ Switch views in the “View” menu or with the keyboard:
 
 ![Folder contents in Details view](screenshots/table_view.webp)
 
+**Details columns.** “Name” takes all the free space, so there's no sideways scrolling until you drag a column border yourself.
+Double-click a border to size the column to its contents; right-click a header for the menu: size one or all columns to fit, give “Name” the free space again, show or hide “Type”, “Size” and “Date”.
+Column widths and order are remembered.
+Details calculates folder sizes in the background while they're on screen; turn it off in [“Settings” → “File list”](#file-list) (“Folder sizes in the Details view”); on network drives, in archives and on devices they aren't calculated.
+
 **Each folder remembers its view.** Choose Tiles for a folder, and it keeps opening in Tiles.
 Other folders use the default view (Icons out of the box), and folders of photos use Gallery.
 The first line of the “View” menu tells you why the folder looks the way it does: “pinned”, “auto: photos” or “default”.
@@ -244,7 +253,7 @@ The first line of the “View” menu tells you why the folder looks the way it 
 - “Set as default view” applies the current view to all folders without a pinned view; you can also choose the default view in [“Settings” → “View”](#view).
 
 **Sorting**: by name, date, size, type or rating, plus “Ascending” and “Folders first”.
-In Details, just click a column header; click it again to reverse the order.
+In Details, just click a column header; click it again to reverse the order; sorting by size weighs every folder and puts them in order by size.
 The sort order is pinned to a folder just like the view, and “Default” unpins it; out of the box, files are sorted by name, with folders first.
 A pinned view and sort order move with the folder when it's renamed or moved.
 
@@ -292,6 +301,7 @@ As soon as you type `/`, a list of types drops down: pick one with the arrow key
 | Typed | What stays |
 |---|---|
 | `/img` | images, including RAW, HEIC and PSD |
+| `/raw` | RAW only |
 | `/vid` | video |
 | `/aud` | audio |
 | `/txt` | text and code |
@@ -341,31 +351,38 @@ Images, archives and programs are skipped; with “Also search binary files” c
 Where a found file lives is shown as a path from the open folder: in the “Folder” column in Details, in the caption in Tiles, in the tooltip in Icons and Gallery, and at the bottom of the Preview pane.
 “Go to location” in a found file's menu opens its folder with the file selected.
 “Stop search” stops the search and keeps what was found, `F5` repeats the search, and going to another folder clears it.
+You can drop files onto the results only onto a found folder: empty space and file rows don't take a drop.
 There's no index: files are read on every search, and nothing is left on disk.
 
 ### Thumbnails
 
-In Tiles, Icons and Gallery, file contents are shown instead of icons; Details keeps regular icons.
+In Tiles, Icons and Gallery, file contents are shown instead of icons; Details keeps regular icons and adds a “Sound” column with the waveform.
 
 | Files                   | Thumbnail                                                |
 |-------------------------|----------------------------------------------------------|
 | Images, HEIC, RAW, PSD  | The image itself; RAW from the embedded preview          |
 | Video                   | A frame                                                  |
 | FB2 and EPUB books, PDF | Cover or first page                                      |
-| Music                   | Cover art from the file or an image next to it (`Cover.jpg`, `folder.jpg`) |
+| Music                   | Cover art from the file or an image next to it (`Cover.jpg`, `folder.jpg`) with the waveform along the bottom; without cover art, the waveform, duration and sample rate |
 | 3D models               | The model at a three-quarter angle; one you rotated in the Preview pane, at that angle; for 3MF, the slicer's picture of the plate |
 | Fonts                   | “Abc” and “Абв” in the font itself                       |
+| Text `.txt`, `.log`, Markdown | A page where lines of text are bars and the heading is darker and larger |
 | Office and OpenDocument files, Krita, OpenRaster, CBZ comics | The picture the program saved in the file; for CBZ, the first page |
-| Folder                  | An overview of its contents                              |
+| Folder                  | Cards of its files: a photo, a track, a model, a program… |
 | Shortcut                | The thumbnail of what it points to                       |
 
 All formats are listed on the [“Formats”](#formats) page.
 
 ![Thumbnail examples](screenshots/thumbnails.webp)
 
+- **Folders**: the thumbnail shows cards of the files in the folder, one per kind: a picture, a video, a track, a document, a model; a program comes first.
+  If the folder has no files of its own, the cards come from its subfolders; a folder with only code and configs shows the icons of its file types; an empty folder stays empty.
+  A folder with its own icon is shown with it.
+- **Sound**: click the waveform on a tile to play the track from that spot, and the ▶ that appears on a file when you hover plays it without selecting it; only one thing plays at a time.
+- **While a thumbnail is being made**, a placeholder stands in for it: a folder's outline with its cards, or the file's type icon; the finished picture replaces it right away.
 - **Speed**: thumbnails are cached, so a folder draws faster when you come back to it.
   Cache size and memory for images are set in [“Settings” → “Cache and memory”](#cache-and-memory).
-- **Freshness**: thumbnails are regenerated when a file changes.
+- **Freshness**: thumbnails are regenerated when a file changes; a folder's, when something inside is added, removed or renamed.
 
 ### Gallery
 
@@ -396,7 +413,7 @@ The brightness of the gray and dark backgrounds is set in [“Settings” → �
 ## Viewing
 
 For many formats, you see a file's contents as soon as you select it: the Preview pane on the right shows images and RAW, video and music with a player, PDFs and documents, spreadsheets, code with syntax highlighting, 3D models, fonts, archive contents, and program details.
-For a folder, the pane counts its files, their total size, and which types take up the space; for a drive, it shows how full the drive is.
+For a folder, the pane counts its files, their total size, and which types and subfolders take up the space; for a drive, it shows how full the drive is.
 
 - [“Preview pane”](#preview-pane): loupe, two photos side by side, search in text, shooting data.
 - [“Full screen”](#full-screen): photos across the whole screen, one at a time or in pairs.
@@ -414,6 +431,8 @@ With nothing selected, you see a summary of the open folder.
 A large image shrinks to fit the pane; a small one isn't stretched.
 `Ctrl`+wheel zooms in steps (50, 100, 200 and 400%) around the point under the pointer, and the zoom stays without holding a button; scrolling further down shows the whole photo again.
 While the zoom changes, a minimap with a frame around the visible part appears in the top left corner.
+A zoomed photo follows the mouse; click it to freeze the spot: the frame stays put, the cursor is an arrow again and can leave the pane, and `Ctrl`+wheel changes the step around the same spot.
+Click again, and the photo follows the mouse once more.
 A RAW file opens instantly from its embedded preview, and the **RAW** button at the bottom turns on full development of the sensor data: the frame switches once development is done, and the mode stays on for the whole folder.
 
 Buttons at the bottom of the pane turn on [review helpers](#review-helpers), including the histogram ![](icons/helper-histogram.svg) and the focus point ![](icons/helper-af.svg).
@@ -441,8 +460,10 @@ The volume is shared by all files and is remembered between launches.
 `Ctrl+3` moves the keyboard to the play button.
 
 - Below a video, a table shows what's inside the file: resolution, codec, HDR, frame rate, audio tracks with their language, subtitles, even for clips that Windows can't play.
-- `Ctrl`+wheel over the frame zooms the video 2× and 4× under the pointer, and the mouse moves the zoomed view around.
+- `Ctrl`+wheel over the frame zooms the video 2× and 4× under the pointer, and the mouse moves the zoomed view around; click the frame to freeze the spot, as with a picture.
 - For music, you see the cover art, tags, and a line about the audio: codec, bitrate, sample rate, bit depth, channels.
+  Below the card is the waveform: click it to play from that spot, click while playing to stop.
+  Several selected tracks stack their waveforms, with the player controls on the one that's playing.
 - If a file doesn't play, the pane names its codec, and if Windows is missing an extension from the Microsoft Store, the pane names the extension and a button opens its page in the Store.
 
 **Spreadsheets** (CSV, TSV, Excel and OpenDocument) are shown as a grid, like in a spreadsheet app: sheets as tabs, columns as letters, rows as numbers; long text in a cell wraps.
@@ -480,6 +501,7 @@ The histogram, when turned on, sits in the corner of the photo.
 - `Ctrl`+wheel zooms in steps, as in the Preview pane; the zoom level is shown next to the name on the bar.
   While a photo is zoomed in, the arrow keys browse the folder and keep the same spot of the frame, and `Ctrl`+arrows move the zoomed view (in a pair, both halves).
   You can swap their roles in the same place, with “Arrow keys when zoomed in full screen”.
+- Click a zoomed photo, in steps or under the `Z` loupe, to freeze the spot: the frame stays put, both halves in a pair, and the next click lets it follow the mouse again.
 - Hold `Alt` to see the frame without helper overlays.
 
 ![Full screen with the 1:1 loupe and the photo bar](screenshots/fullscreen_zoom.webp)
@@ -494,20 +516,20 @@ For other files not in the table, you see the system icon instead of a thumbnail
 | Files | Thumbnail | Preview pane | Full screen, ratings, helpers | Content search | Conversion |
 |---|---|---|---|---|---|
 | **Images** `.jpg` `.jpeg` `.jpe` `.jfif` `.png` `.gif` `.bmp` `.ico` `.tif` `.tiff` `.webp` `.tga` `.jxr` `.wdp` | image | image, loupe; animated GIF and WebP with a player | yes | | to JPEG, to PNG, shrink to 1920: Wander itself; to WebP: ffmpeg |
-| **Photoshop** `.psd` `.psb` | image | the composite image, without layers; loupe | yes | | |
+| **Photoshop** `.psd` `.psb` | image | the composite image, without layers; loupe | yes | | to JPEG, to PNG, shrink to 1920: Wander itself, from the composite image |
 | **RAW** `.cr2` `.cr3` `.crw` `.nef` `.nrw` `.arw` `.srf` `.sr2` `.raf` `.orf` `.ori` `.rw2` `.rwl` `.pef` `.3fr` `.fff` `.iiq` `.dng` | embedded preview | preview instantly; **RAW** button: decoding of the sensor data | yes | | JPEG preview from the file: Wander itself; after that, as images |
 | **HEIC / HEIF** `.heic` `.heif` `.hif` | image[^heic] | image[^heic] | yes[^heic] | | as images |
 | **AVIF, JPEG XL** `.avif` `.jxl` | image[^avif] | image[^avif] | yes[^avif] | | as images |
 | **SVG** `.svg` | icon | image; `</>`: markup | | as code | |
 | **Video** `.mp4` `.m4v` `.mov` `.wmv` `.avi` `.mkv` `.webm` `.ogv` `.mpg` `.mpeg` `.asf` `.3gp` `.3g2` | frame | player, tracks and codecs; what the built-in player can't open plays in the system player | | | to MP4 (H.264), compress, audio to M4A or MP3, frame to PNG: ffmpeg |
-| **Music** `.mp3` `.flac` `.m4a` `.m4b` `.aac` `.wav` `.wma` `.ogg` `.opus` `.aif` `.aiff` `.aifc` `.au` `.mka` `.mp2` `.mpa` | cover art | cover art, tags, codec and quality, player | | | to MP3, M4A, FLAC, WAV: ffmpeg |
+| **Music** `.mp3` `.flac` `.m4a` `.m4b` `.aac` `.wav` `.wma` `.ogg` `.opus` `.aif` `.aiff` `.aifc` `.au` `.mka` `.mp2` `.mpa` | cover art and waveform | cover art, tags, codec and quality, waveform, player | | | to MP3, M4A, FLAC, WAV: ffmpeg |
 | **3D** `.stl` `.obj` `.gltf` `.glb` `.ply` `.3mf` `.fbx` `.blend` `.blend1` | model; for 3MF, the slicer's picture of the plate | model: rotate, zoom | | | |
 | **Fonts** `.ttf` `.otf` `.ttc` | “Abc” and “Абв” in the font itself | sample text, the font's characters, name, version, author | | | |
 | **Spreadsheets** `.csv` `.tsv` `.xlsx` `.xlsm` `.ods` | icon; for XLSX, XLSM, ODS, the picture from the file, if the program saved one | grid: sheets, columns, rows; CSV and TSV also as text | | yes, except `.xlsm` | XLSX and ODS to PDF: LibreOffice |
-| **Text** `.txt` `.log` `.ini` `.cfg` `.conf` `.toml` `.env` `.mtl` `.gitignore` `.gitattributes` `.gitmodules` `.editorconfig` `.dockerignore` `.npmrc` | icon | text, encoding detected automatically | | yes | |
+| **Text** `.txt` `.log` `.ini` `.cfg` `.conf` `.toml` `.env` `.mtl` `.gitignore` `.gitattributes` `.gitmodules` `.editorconfig` `.dockerignore` `.npmrc` | for `.txt` and `.log`, a page of text; icon for the rest | text, encoding detected automatically | | yes | |
 | **Subtitles, playlists, contacts** `.srt` `.vtt` `.ass` `.ssa` `.m3u` `.m3u8` `.pls` `.cue` `.nfo` `.vcf` `.ics` `.reg` | icon | text | | yes | |
-| **Code**: languages, markup, configs, shaders, Unity and Godot assets[^code] | icon | syntax highlighting | | yes | |
-| **Markdown** `.md` `.markdown` | icon | rendered document | | yes | to DOCX: pandoc |
+| **Code**: languages, markup, configs, shaders, Unity and Godot assets[^code] | icon | syntax highlighting; patches `.diff` `.patch`: lines on green and red | | yes | |
+| **Markdown** `.md` `.markdown` | a page of text | rendered document | | yes | to DOCX: pandoc |
 | **PDF** `.pdf` | first page | document | | via Windows, if a PDF reader is installed | |
 | **HTML, MHT** `.html` `.htm` `.mht` `.mhtml` | icon | page, without network access | | as text | |
 | **Office documents** `.doc` `.dot` `.docx` `.pptx` `.odt` `.odp` | icon; for DOCX, PPTX, ODT, ODP, the picture from the file, if the program saved one | text only | | yes; `.doc` and `.dot` via Windows | to PDF, except `.dot`: LibreOffice; DOCX to Markdown: pandoc |
@@ -519,7 +541,7 @@ For other files not in the table, you see the system icon instead of a thumbnail
 | **Programs** `.exe` `.dll` `.sys` `.msi` `.ocx` `.scr` `.cpl` `.drv` | its own icon | info card: version, publisher, signature | | | |
 | **Shortcuts** `.lnk` | target's thumbnail with an arrow | target's contents | | | |
 | **Companions** `.xmp` `.pp3` `.meta` | one item with the main file | rating and label; GUID | | | |
-| **Folder** | preview of contents | breakdown: files, folders, size, top types | | | |
+| **Folder** | cards of the files inside | breakdown: files, folders, size, types and subfolders by size; click to filter or open | | | |
 | **Drive** | icon | volume label, file system, usage | | | |
 
 [^heic]: Requires Windows extensions from the Microsoft Store; which ones are listed on the [“Preview by type”](#preview-by-type) page, in the “HEIC / HEIF” row.
@@ -543,12 +565,12 @@ What the [Preview pane](#preview-pane) shows for each file type and what you can
 | RAW (CR3, CR2, NEF, ARW, DNG…) | The embedded preview, instantly, rotated per EXIF. The **RAW** button turns on full development of the sensor data: the preview shows right away, and the developed frame replaces it when ready; the mode stays on for the whole folder. A RAW file without an embedded preview is opened by a Windows codec; if there's none, the pane names the extension you need from the Store |
 | GIF, WebP | The image with the loupe, like other images; animated ones in a player |
 | Video | A player: play and pause, repeat (on from the start for clips under three seconds), seeking; `Ctrl`+wheel to zoom 2× and 4×. Below it, a table read from the file itself (MP4, MOV, MKV, WebM, AVI): resolution, codec, color depth, HDR, frame rate, bitrate, up to four audio tracks, subtitles. WebM, OGV and whatever the built-in player can't open play in the system player. If neither can open it, the pane names the codec, and if an extension from the Store is missing (HEVC, AV1, VP9, MPEG-2, Ogg), its name and a button for its page |
-| Music | Cover art, title, artist, album, year, a player, and a line about the audio: codec, bitrate, sample rate, bit depth, channels. Tags are read from MP3, FLAC, M4A and M4B, WAV, Ogg and Opus; for other formats, the name and duration. The cover art comes from the file, or else from an image next to it (`Cover.jpg`, `folder.jpg`, `front.*`, one with the same name, or the only image in the folder). Cyrillic tags in Windows-1251 are read correctly |
+| Music | Cover art, title, artist, album, year, a player, and a line about the audio: codec, bitrate, sample rate, bit depth, channels. Below the card, the waveform: click to play from that spot, click while playing to stop; several selected tracks stack their waveforms. Tags are read from MP3, FLAC, M4A and M4B, WAV, Ogg and Opus; for other formats, the name and duration. The cover art comes from the file, or else from an image next to it (`Cover.jpg`, `folder.jpg`, `front.*`, one with the same name, or the only image in the folder). Cyrillic tags in Windows-1251 are read correctly |
 | 3D (STL, OBJ, glTF, GLB, PLY, 3MF, FBX, BLEND) | The model at a three-quarter angle: drag to rotate, wheel to zoom; Wander remembers a model you rotated, and the thumbnail shows it the same way. Triangle and vertex counts at the bottom. Colors come from the model file. The texture is the one the file names or, if it names none, a matching one by name next to the model or in a `textures` folder; you see it both in the pane and on the thumbnail. Only the color map is shown, no relief or metal. 3MF includes slicer projects, Bambu Studio and Orca among them; FBX, both binary and text. BLEND: from Blender 4, without modifiers, so a half with a mirror stays a half; `.blend1` backups open the same way, with a darker thumbnail. An FBX with only animation and no mesh isn't shown. DAE and DXF aren't supported |
 | Fonts (TTF, OTF, TTC) | Sample text in sizes from 12 to 48, the letters and digits the font has (for icon and symbol fonts, their characters), name, style, version, author. The font file stays free: you can rename or delete it without leaving the preview |
 | Spreadsheets (CSV, TSV, XLSX, XLSM, ODS) | A grid: sheets as tabs, columns as letters, rows as numbers, dates and percentages as in a spreadsheet app; long text wraps to the column width. The first 1000 rows and 100 columns are shown. The `</>` button shows CSV and TSV as text |
 | Text | The encoding is detected automatically, including 1251 and 866. A large file is shown from the start, with “… showing the start of the file, 12 MB in total” at the bottom. Subtitles, playlists, `.nfo`, contacts and calendars are shown as text too |
-| Code | Syntax highlighting: common languages, bat and cmd, sh, shaders, YAML, Unity and Godot assets, `.diff` and `.patch` |
+| Code | Syntax highlighting: common languages, bat and cmd, sh, shaders, YAML, Unity and Godot assets. Patches `.diff` and `.patch`: added lines on green, removed lines on red |
 | PDF, HTML, MHT, Markdown | The rendered document; in Markdown, tables, `- [x]`, `~~strikethrough~~`, links, and footnotes. The pane doesn't go online: external images and scripts aren't loaded |
 | FB2, RTF | Cover, title, authors, description, and text (a long book from the beginning); RTF with fonts, tables, and images |
 | Word, PowerPoint, OpenDocument, EPUB | The document's text, marked “Text only; formatting isn't shown”; an old plain-text `.doc`, simply as text |
@@ -556,7 +578,7 @@ What the [Preview pane](#preview-pane) shows for each file type and what you can
 | Shortcut `.lnk` | The target's contents; at the bottom, the target's name and “Go to target”. A broken shortcut is reported as such |
 | A file with no extension or the wrong one | By its contents: a PDF named `scan.png` as a document, a video `clip.dat` in a player |
 | Drive | Volume label, file system, and a usage bar (yellow from 85%, red from 95%) |
-| Folder | A breakdown: files, folders, size, the largest types with bars. The numbers grow as the scan goes on; leaving the folder stops it |
+| Folder | A breakdown: files, folders, size, and below them the file types and subfolders by size, with bars. Click a type to keep only its files in the list, subfolders included; click again to clear the filter; click a subfolder to open it. The numbers grow as the scan goes on; leaving the folder stops it. A zip archive and a folder inside it get the same breakdown |
 
 ## Working with files
 
@@ -645,11 +667,18 @@ The item in bold is what a normal drop would do.
 Whatever involved the deleted files leaves the undo history; the rest stays.
 There's no “Delete permanently” item in the menu, on purpose.
 
+**The delete confirmation.**
+The window is a table: you can look over every folder and file, and hovering a row shows its thumbnail.
+“Cancel” is selected by default; the permanent “Delete” takes an explicit mouse click.
+If some of the files are read-only, the confirmation window appears for them.
+
+<img src="screenshots/delete_confirmation.webp" alt="The delete confirmation window">
+
 **The Recycle Bin** opens right in Wander, from a standard bookmark on the left.
 You can see where each file was deleted from and when; “Restore” is the first menu item and works on several files at once.
 Other operations in the Recycle Bin are turned off, and you empty it with Windows tools.
 
-**If a file doesn't fit in the Recycle Bin** (its path is longer than 259 characters, or it's on a drive without a Recycle Bin), Wander doesn't delete it silently: the rest goes to the Recycle Bin, and for those files you get a question with a list of names: “Delete permanently” or “Don't delete”.
+**If a file doesn't fit in the Recycle Bin** (its path is longer than 259 characters, or it's on a drive without a Recycle Bin), Wander doesn't delete it silently: the rest goes to the Recycle Bin, and for those files you get the same question as a table: “Delete permanently” or “Don't delete”.
 “Don't delete” is selected by default.
 
 **Replacing can be undone too.** A file replaced during copying goes to the Recycle Bin, and `Ctrl+Z` restores both sides.
@@ -682,7 +711,12 @@ If only the left one is checked, the folder is replaced entirely.
 - Below the list, you pick an answer for the pairs not yet resolved: replace, keep existing, keep both, or replace if newer.
 - The “Don't ask about identical files” checkbox is selected by default; its initial state is set in [“Settings” → “File operations”](#file-operations-1).
 
-**Compare.** The ![Compare](icons/compare.svg) button next to a pair's name opens both files side by side: texts with shared scrolling, images side by side or overlaid (`Space` switches); the loupe shows the same spot on both.
+**Compare.** The ![Compare](icons/compare.svg) button next to a pair's name opens both files in a separate window.
+Images go side by side or overlaid (`Space` switches), and the loupe shows the same spot on both.
+Two texts open as their differences in one column: added lines on green, removed lines on red; the `±` button puts the texts side by side with shared scrolling.
+If there are no differences, the window says so: “The files are identical” or “Only line endings differ”.
+The differences are computed by an installed git; without it, the texts are shown side by side.
+The same window opens from the “Compare” item in the menu of two selected files.
 
 The “OK” button becomes available once all pairs are resolved; `Esc` cancels the whole operation, and at that point nothing has been done yet.
 Mistakes aren't a problem: replaced files are in the Recycle Bin, and `Ctrl+Z` brings everything back.
@@ -690,8 +724,9 @@ Mistakes aren't a problem: replaced files are in the Recycle Bin, and `Ctrl+Z` b
 ### Long operations
 
 Copying, moving, deleting and extracting run in the background.
-If an operation takes more than an instant, it gets its own window: the current file name, “Files: N of M”, the amount of data, the speed and the time remaining.
+If an operation takes more than an instant, it gets its own window: the current file name, “Files: N of M”, the amount of data, the speed and the time remaining; extracting from a zip shows the same, other archives only the percentage.
 Meanwhile, Wander works as usual: you can browse folders and start other operations.
+The progress also shows on Wander's taskbar button: the bar runs while the total is being counted and turns yellow when the operation is waiting for a disconnected device.
 
 <img src="screenshots/file_operation.webp" width="640" alt="The operation window, and in Gallery, clocks on the files it's working on">
 
@@ -855,6 +890,7 @@ The right-click menu shows the whole list at once, without “Show more options�
 
 - At the top, the most-used items: “Open”, “Open with”, and other programs' items with their icons and submenus.
 - At the bottom, the **“File”** submenu: cut, copy, paste, copy path or name, rename, create shortcut, delete, plus “Send to” and other Windows file items.
+- With two files selected, **“Compare”**: texts as their differences, images side by side, as described on the [“Resolving conflicts”](#resolving-conflicts) page.
 - Duplicate items are removed.
 
 From the keyboard, open the menu with `Shift+F10` or the Menu key.
@@ -892,8 +928,8 @@ One batch renames either only files or only folders.
 |---|---|
 | `[N]` | the original name |
 | `[C]` | a counter; the start number, step and number of digits are in the fields below the template |
-| `[D]` | date modified; `[D:yyyy-MM-dd]` in your own format |
-| `[X]` | date taken from EXIF, or date modified for a file without it |
+| `[D]` | date modified; `[D:yyyy-mm-dd]` in your own format from the letters `y`, `m`, `d`, `h`, `s` in any case: `m` right after the hours or before the seconds means minutes, otherwise month (`[D:dd.mm.yy]`, `[D:yyyy-mm-dd hh-mm]`) |
+| `[X]` | date taken from EXIF, or date modified for a file without it; the format is the same as for `[D]` |
 | `[P]` | the folder name |
 
 For example, `[P]_[C]` with a three-digit counter in the “Vacation” folder gives `Vacation_001`, `Vacation_002` and so on.
@@ -918,7 +954,7 @@ Select files and choose an item: the result is saved next to the source under a 
 | For | What | Requires |
 |---|---|---|
 | RAW | Small and large preview: the JPEG the camera embedded in the file | nothing |
-| Images | To JPEG (quality 90), to PNG, shrink to 1920 on the long side | nothing |
+| Images, TGA and Photoshop included | To JPEG (quality 90), to PNG, shrink to 1920 on the long side | nothing |
 | Images | To WebP | FFmpeg |
 | Video | To MP4 (H.264); compress to `_small.mp4`; audio to M4A or MP3; frame to PNG | FFmpeg |
 | Audio | To MP3, M4A, FLAC, WAV | FFmpeg |
@@ -952,7 +988,8 @@ Wander re-encodes images itself:
 - date taken, camera, shutter speed, aperture, ISO, focal length, coordinates, rating and copyright carry over to JPEG and TIFF, including from RAW; title, keywords and author carry over when Windows provides them, but are not taken from an `.xmp` next to the photo;
 - a JPEG that needs neither shrinking nor rotating isn't re-compressed;
 - transparent areas are filled with white in JPEG, and PNG, BMP and GIF don't store metadata;
-- a RAW that Windows can't open is converted from the JPEG embedded in it.
+- a RAW that Windows can't open is converted from the JPEG embedded in it;
+- TGA and Photoshop files, which Windows has no codec for, are decoded by Wander itself: PSD and PSB from the composite image, and a file saved without one has nothing to convert.
 
 **Preview from RAW** is the embedded JPEG as is, without re-compression, so it's fast.
 **Large** (`IMG_lpv.jpg`) is the biggest one the camera embedded (for CR3, CR2 and ARW, it's the full frame); **small** (`IMG_spv.jpg`) exists only in CR3, at 1620×1080.
@@ -1062,6 +1099,7 @@ After operations and dialogs, the keyboard stays where it was: after deleting, t
 | `Shift+F10`, Menu key *in the tree* | Menu of the folder under the cursor |
 | `Esc` *in the tree* | Return the keyboard to the files |
 | `F2` *in the tree* | Rename the folder under the cursor |
+| `F2` *in Bookmarks* | Your own name for the bookmark; the folder is left alone |
 | `Ctrl+↑` / `Ctrl+↓` *in Bookmarks* | Move your bookmark up / down |
 
 #### File operations
@@ -1145,6 +1183,10 @@ After operations and dialogs, the keyboard stays where it was: after deleting, t
 | `Ctrl`+wheel *in the files* | Larger / smaller; each view has its own sizes, and they're saved |
 | `Ctrl`+wheel click | Reset the current view to its default size |
 | Click a column header | Sort; click again to reverse the order |
+| Double-click a column border | Size the column to its contents |
+| Right-click the Details header | Column menu: size one or all to fit, “Name” takes the free space, the “Type”, “Size” and “Date” columns |
+| Click the word “Bookmarks” / “Computer” in a pane's header | The bookmarks page / the drives in the file area |
+| ▶ on a sound file when hovering | Play without selecting the file; click the waveform on a tile to play from that spot |
 | Click a star / circle in the filter bar | Only this rating / only this label; click again to clear the filter |
 | Click the crossed-out star | Only photos without a rating |
 | `Ctrl`+click a star / circle | Add or remove one rating or label without touching the others |
@@ -1156,6 +1198,7 @@ After operations and dialogs, the keyboard stays where it was: after deleting, t
 | Left button on an image in the Preview pane | Loupe |
 | `Ctrl`+wheel *over a photo* | Zoom in steps (50 / 100 / 200 / 400%) around the point under the pointer; in the Preview pane and in full screen |
 | `Ctrl`+wheel *over a video* | Zoom 2× / 4× under the pointer |
+| Click a zoomed photo or video | Freeze the spot: the frame stays put, the cursor is free; click again to follow the mouse |
 | Wheel, “back” / “forward” buttons *in full screen* | Browse photos; with `Shift`, the right one of a pair |
 | Left, then right button on an image *in a pair* | Only the photo under the pointer moves: this is how you align shots taken with an offset; once the right button is released, the photos move together and the offset is kept |
 | `Alt` (hold) *over an image* | Helper overlays are hidden while the key is held |
@@ -1180,12 +1223,12 @@ Learn more: [“Navigation”](#navigation), [“Folder panes”](#folder-panes)
 
 #### File list
 
-- **Show in the list**: “Hidden files and folders”, and under it “Protected operating system files” and “System folders and files at drive roots”.
+- **Show in the list**: “Hidden files and folders”, and under it “Protected operating system files” and “System folders and files”; “Folder sizes in the Details view”: folders on screen are weighed in the background, all of them when sorting by size.
 - **Coming back to a folder**: “The same file and scroll position” (on out of the box) and “The same rating and label filter” (off).
 - **Companion files**: “Show a file and its companions as one item”.
 - **Changes made by other programs**: “Show right away”; if you clear it, changes appear only after you press `F5`.
 
-Learn more: [“File area”](#file-area), [“Navigation”](#navigation), [“Companion files”](#companion-files).
+Learn more: [“File area”](#file-area), [“Views and sorting”](#views-and-sorting), [“Navigation”](#navigation), [“Companion files”](#companion-files).
 
 #### View
 
@@ -1392,7 +1435,7 @@ Learn more on the [“Working with files”](#working-with-files) page.
 **Testing.**
 
 - **Logic: tests.** The decisions that files depend on (what to do on a name conflict, how to undo an operation, what counts as a companion, how to name the result) live in a core with no interface.
-  It's about a third of Wander's code, and it's checked by **over two and a half thousand** automated tests that cover **91%** of its lines.
+  It's about a third of Wander's code, and it's checked by **almost three thousand** automated tests that cover **91%** of its lines.
 - **Interface: scenarios.** Before a release, automated scenarios walk through the real Wander window on a set of test folders: thousands of files, RAW, documents and archives in various formats, names in various languages, paths longer than 260 characters, hidden and locked files.
   They copy and undo, search, page through the Preview pane, check selection and focus, and verify the result.
   A long run walks through folders for half an hour, making sure memory doesn't grow.
@@ -1423,7 +1466,6 @@ Learn more on the [“Working with files”](#working-with-files) page.
 What Wander will learn to do next; no order or dates are promised.
 
 - Remapping keyboard shortcuts: for now, the list in Settings only shows them.
-- Textures on 3D models, a waveform in the audio preview.
 - Filtering photos by sharpness.
 - Search by text in `.pdf` without an installed PDF reader.
 - Writing to archives, creating archives, entering passwords, searching inside archives.

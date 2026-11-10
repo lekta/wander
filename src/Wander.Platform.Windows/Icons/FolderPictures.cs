@@ -288,7 +288,9 @@ internal sealed class FolderPictures {
         try {
             foreach (var pick in picks) {
                 cancel.ThrowIfCancellationRequested();
-                if (_fileIcon(pick.Path, size, cancel) is { } bytes && Decode(bytes) is { } picture) {
+                // A file shown by its type wears the type's icon, not its own picture.
+                byte[]? icon = pick.Content == FolderContent.Type ? _typeIcon(pick.Path) : _fileIcon(pick.Path, size, cancel);
+                if (icon is { } bytes && Decode(bytes) is { } picture) {
                     cards.Add(new FolderCard(picture, pick.Content, pick.Inside));
                     whole &= _lasting(pick.Path);
                 } else {

@@ -156,6 +156,9 @@
     { "do": "device", "op": "unplug" },
     { "do": "device", "op": "plug", "root": "{sandbox}\\phone" },
     { "do": "navigate", "path": "device:Harness Phone\\Internal storage\\DCIM\\Camera" },
+    // The plug's own second look (2.5 s after it) is over before the
+    // unplug: the two crossing re-read a device that is gone (TECHDEBT).
+    { "do": "sleep", "ms": 3000 },
     { "do": "device", "op": "unplug" },
     // The window looks again 2.5 s after a device's notice - a phone that
     // only blinked is not left.
