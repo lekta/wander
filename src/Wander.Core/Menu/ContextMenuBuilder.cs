@@ -187,7 +187,7 @@ public static class ContextMenuBuilder {
         }
         fileGroup.AddRange(new[] {
             MenuEntry.Divider,
-            Cmd(MenuCommandId.Delete, fs),
+            Cmd(MenuCommandId.Delete, fs || t.IsArchiveFile),
         });
         if (shell.FileOperations.Count > 0) {
             fileGroup.Add(MenuEntry.Divider);

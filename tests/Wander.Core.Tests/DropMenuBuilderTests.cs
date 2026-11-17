@@ -44,6 +44,22 @@ public class DropMenuBuilderTests {
     }
 
     [Fact]
+    public void DroppedArchives_LeadWithExtractHere_AndTheBoldRowStaysTheLeftButtons() {
+        var menu = DropMenuBuilder.Build(Drop(File("a.zip")) with { ArchivesOnly = true, MoveByDefault = true });
+
+        Assert.Equal(MenuCommandId.DropExtractHere, menu[2].Id);
+        Assert.False(menu[2].IsDefault);
+        Assert.True(Find(menu, MenuCommandId.DropMoveHere)!.IsDefault);
+    }
+
+    [Fact]
+    public void NotOnlyArchives_NoExtractHere() {
+        var menu = DropMenuBuilder.Build(Drop(File("a.jpg")));
+
+        Assert.Null(Find(menu, MenuCommandId.DropExtractHere));
+    }
+
+    [Fact]
     public void OutOfAnArchive_OnlyCopyingIsOffered() {
         var menu = DropMenuBuilder.Build(Drop(File("a.jpg")) with { FromArchive = true, MoveByDefault = true });
 

@@ -536,6 +536,16 @@ public partial class PreviewPane : UserControl {
                 ShowModel();
                 break;
 
+            case nameof(PreviewController.ModelLit):
+            case nameof(PreviewController.ModelTextured):
+            case nameof(PreviewController.ModelBackOn):
+                ApplyModelLook();
+                break;
+
+            case nameof(PreviewController.ModelWireOn):
+                ShowWire();
+                break;
+
             case nameof(PreviewController.FindRequest):
                 OnFindRequest(Controller.FindRequest);
                 break;
@@ -2240,9 +2250,26 @@ public partial class PreviewPane : UserControl {
     private const double ModelMinZoom = 0.3;
     private const double ModelMaxZoom = 8.0;
 
+    /// <summary>The wireframe's lines on screen, in device-independent pixels.</summary>
+    private const double WireWidth = 1.0;
+
+    /// <summary>How far the lines stand toward the eye, a share of their distance: over the faces, not through them.</summary>
+    private const float WireLift = 0.003f;
+
     private Point _modelDragFrom;
     private bool _modelDragging;
+    private bool _modelPanning;
     private double _modelZoom = 1.0;
+
+    // Middle-drag moves the camera across the screen, the model's centre of
+    // turn stays put; not kept - the model opens centred.
+    private Vector3D _modelPan;
+
+    // The wireframe's drawable, last among the parts; its corners are laid
+    // again for every new view (LayWire), at most once a frame.
+    private GeometryModel3D? _wire;
+    private float[]? _wireCorners;
+    private bool _wirePending;
 
     /// <summary>
     /// Points the camera at the model that has just been read.
@@ -2257,19 +2284,112 @@ public partial class PreviewPane : UserControl {
     /// </summary>
     private void ShowModel() {
         ModelParts.Children.Clear();
+        _wire = null;
         foreach (var part in Controller.ModelParts) {
-            ModelParts.Children.Add(new GeometryModel3D {
-                Geometry = part.Geometry,
-                Material = part.Front,
-                BackMaterial = part.Back,
-            });
+            ModelParts.Children.Add(new GeometryModel3D { Geometry = part.Geometry });
         }
 
         if (ModelParts.Children.Count == 0) {
             return;
         }
 
+        ApplyModelLook();
         ResetModelView();
+        ShowWire();
+    }
+
+
+    /// <summary>The parts painted by the switches (<see cref="ModelLook"/>): lit or flat, the file's colours or clay, the back as is or pink.</summary>
+    private void ApplyModelLook() {
+        var parts = Controller.ModelParts;
+        bool lit = Controller.ModelLit;
+        for (int i = 0; i < parts.Count && i < ModelParts.Children.Count; i++) {
+            if (ModelParts.Children[i] is GeometryModel3D model) {
+                var surface = Controller.ModelTextured ? parts[i].Surface : ModelLook.Clay;
+                model.Material = ModelLook.Front(surface, lit);
+                model.BackMaterial = ModelLook.Back(surface, lit, Controller.ModelBackOn);
+            }
+        }
+
+        if (_wire is not null) {
+            _wire.Material = _wire.BackMaterial = WireInk();
+        }
+    }
+
+
+    /// <summary>
+    /// The wireframe on or off. Its strips sit in the parts' group, so they
+    /// turn with the model, and the model hides the edges behind it.
+    /// </summary>
+    private void ShowWire() {
+        if (_wire is not null) {
+            ModelParts.Children.Remove(_wire);
+            _wire = null;
+        }
+        if (!Controller.ModelWireOn || Controller.ModelWire is not { } wire || ModelParts.Children.Count == 0) {
+            return;
+        }
+
+        var ink = WireInk();
+        _wire = new GeometryModel3D {
+            Geometry = new MeshGeometry3D { TriangleIndices = new Int32Collection(MeshWire.StripTriangles(wire.Edges.Length / 2)) },
+            Material = ink,
+            BackMaterial = ink,
+        };
+        ModelParts.Children.Add(_wire);
+        LayWire();
+    }
+
+
+    private Material WireInk() {
+        return ModelLook.Ink(light: Controller.ModelTextured && Controller.ModelDark);
+    }
+
+
+    private void ScheduleWire() {
+        if (_wire is null || _wirePending) {
+            return;
+        }
+
+        _wirePending = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() => {
+            _wirePending = false;
+            LayWire();
+        }));
+    }
+
+
+    /// <summary>
+    /// The strips turned to face the camera, a set width on screen: the
+    /// camera is brought into the model's own space, where the edges are.
+    /// </summary>
+    private void LayWire() {
+        if (_wire?.Geometry is not MeshGeometry3D geometry || Controller.ModelWire is not { } wire) {
+            return;
+        }
+
+        var turn = ModelParts.Transform.Value;
+        double width = ModelViewport.ActualWidth;
+        if (!turn.HasInverse || width <= 0) {
+            return;
+        }
+
+        turn.Invert();
+        var eye = turn.Transform(ModelCamera.Position);
+        float unit = (float)(2 * Math.Tan(ModelCamera.FieldOfView / 2 * Math.PI / 180) / width * WireWidth);
+        int length = wire.Edges.Length * 6;
+        if (_wireCorners is null || _wireCorners.Length != length) {
+            _wireCorners = new float[length];
+        }
+        var corners = _wireCorners;
+        MeshWire.Strips(wire.Positions, wire.Edges, new System.Numerics.Vector3((float)eye.X, (float)eye.Y, (float)eye.Z), unit, WireLift, corners);
+
+        var points = new Point3DCollection(length / 3);
+        for (int i = 0; i + 2 < length; i += 3) {
+            points.Add(new Point3D(corners[i], corners[i + 1], corners[i + 2]));
+        }
+        points.Freeze();
+        geometry.Positions = points;
     }
 
     /// <summary>
@@ -2280,7 +2400,9 @@ public partial class PreviewPane : UserControl {
     /// </summary>
     private void ResetModelView() {
         _modelDragging = false;
+        _modelPanning = false;
         _modelZoom = 1.0;
+        _modelPan = default;
         ModelSpin.Angle = Controller.ModelView.Spin;
         ModelTilt.Angle = Controller.ModelView.Tilt;
         if (Controller.HasModel) {
@@ -2303,7 +2425,7 @@ public partial class PreviewPane : UserControl {
         // reads as a flat silhouette.
         var offset = new Vector3D(0, radius * 0.55, distance);
 
-        ModelCamera.Position = centre + offset;
+        ModelCamera.Position = centre + _modelPan + offset;
         ModelCamera.LookDirection = -offset;
         ModelCamera.UpDirection = new Vector3D(0, 1, 0);
 
@@ -2312,6 +2434,7 @@ public partial class PreviewPane : UserControl {
         // the near plane.
         ModelCamera.NearPlaneDistance = Math.Max(radius * 0.01, 1e-5);
         ModelCamera.FarPlaneDistance = (distance + (radius * 4)) * 4;
+        ScheduleWire();
     }
 
     /// <summary>
@@ -2385,7 +2508,58 @@ public partial class PreviewPane : UserControl {
         }
     }
 
+    private void Model_PanDown(object sender, MouseButtonEventArgs e) {
+        if (e.ChangedButton != MouseButton.Middle || !Controller.HasModel) {
+            return;
+        }
+
+        _modelPanning = true;
+        _modelDragFrom = e.GetPosition((IInputElement)sender);
+        ((UIElement)sender).CaptureMouse();
+        e.Handled = true;
+    }
+
+
+    private void Model_PanUp(object sender, MouseButtonEventArgs e) {
+        if (e.ChangedButton != MouseButton.Middle || !_modelPanning) {
+            return;
+        }
+
+        _modelPanning = false;
+        ((UIElement)sender).ReleaseMouseCapture();
+        e.Handled = true;
+    }
+
+
+    /// <summary>
+    /// The camera slides across the screen by as much as the mouse moved:
+    /// a pixel is worth what a pixel covers at the distance of the model's
+    /// centre, so the model follows the pointer at any zoom.
+    /// </summary>
+    private void PanModel(Point now) {
+        double width = ModelViewport.ActualWidth;
+        if (width <= 0) {
+            return;
+        }
+
+        var look = ModelCamera.LookDirection;
+        double unit = 2 * look.Length * Math.Tan(ModelCamera.FieldOfView / 2 * Math.PI / 180) / width;
+        var right = Vector3D.CrossProduct(look, ModelCamera.UpDirection);
+        right.Normalize();
+        var up = Vector3D.CrossProduct(right, look);
+        up.Normalize();
+        _modelPan += ((-(now.X - _modelDragFrom.X) * right) + ((now.Y - _modelDragFrom.Y) * up)) * unit;
+        _modelDragFrom = now;
+        PlaceModelCamera();
+    }
+
+
     private void Model_MouseMove(object sender, MouseEventArgs e) {
+        if (_modelPanning) {
+            PanModel(e.GetPosition((IInputElement)sender));
+
+            return;
+        }
         if (!_modelDragging) {
             return;
         }
@@ -2397,6 +2571,7 @@ public partial class PreviewPane : UserControl {
         // upside down and every further drag moves it the wrong way.
         ModelTilt.Angle = Math.Clamp(ModelTilt.Angle + ((now.Y - _modelDragFrom.Y) * 0.4), -89, 89);
         _modelDragFrom = now;
+        ScheduleWire();
     }
 
     /// <summary>

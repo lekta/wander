@@ -983,7 +983,7 @@ public sealed class ScenarioRunner {
         var modes = new[] { ViewMode.Details, ViewMode.Tiles, ViewMode.LargeIcons, ViewMode.Gallery };
         var random = new Random(step.Int("seed", 20260902));
         var clock = Stopwatch.StartNew();
-        long minutes = Math.Max(1, step.Int("minutes", 5));
+        long minutes = Math.Max(1, _context.SoakMinutes ?? step.Int("minutes", 5));
         long lastSample = 0;
         var samples = new List<Sample> { _metrics.Take("soak-0") };
 

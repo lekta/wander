@@ -5,7 +5,8 @@ using System.Text.Json.Serialization;
 namespace Wander.Harness.Host;
 
 /// <summary>Where this run reads and writes.</summary>
-public sealed record RunContext(Scenario Scenario, string SandboxRoot, string OutDir, string DataDir) {
+/// <param name="SoakMinutes">--minutes from the command line; overrides "minutes" of a soak step when set.</param>
+public sealed record RunContext(Scenario Scenario, string SandboxRoot, string OutDir, string DataDir, int? SoakMinutes = null) {
     public string ScreenshotsDir => Path.Combine(OutDir, "screenshots");
 
     /// <summary><c>{sandbox}</c> and <c>{out}</c> in scenario paths.</summary>

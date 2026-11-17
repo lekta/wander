@@ -36,7 +36,7 @@ public static partial class Strings {
     /// <summary>Шаблон</summary>
     public static string BatchRenameTemplate => Get(nameof(BatchRenameTemplate));
 
-    /// <summary>[N] имя · [C] счётчик · [D] дата изменения · [D:yyyy-MM-dd] дата в своём формате · [X] дата съёмки · [P] папка. Остальное — как написано</summary>
+    /// <summary>[N] имя, [C] счётчик, [D] дата изменения, [D:yyyy-MM-dd] дата в своём формате, [X] дата съёмки, [P] папка. Остальное - как написано</summary>
     public static string BatchRenameTemplateHint => Get(nameof(BatchRenameTemplateHint));
 
     /// <summary>Счётчик [C]</summary>

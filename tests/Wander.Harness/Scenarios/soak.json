@@ -8,8 +8,9 @@
   // the start: the first minute is the thumbnail caches filling, and no
   // run would ever pass if that counted. So three minutes is the
   // shortest length that measures anything - one to warm up and two to
-  // watch. The release run (QA.md, "Предрелизный прогон") is thirty:
-  // raise "minutes" and leave the limits alone.
+  // watch. The release run (PRERELEASE.md, step 4) is thirty:
+  // "run soak.json --minutes 30", the file and the limits stay as they are;
+  // stepTimeoutMs covers up to about 40.
   "name": "soak",
   "sandbox": "default",
   "profiles": [ "photos", "raw", "big", "names" ],

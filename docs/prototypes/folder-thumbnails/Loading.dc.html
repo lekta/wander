@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Пока грузится — варианты рядом</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 100%; padding: 28px 32px 48px; background: #F3F3F3; color: #1A1A1A; font-family: 'Segoe UI', system-ui, sans-serif;">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 6px;">
+    <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Пока миниатюра грузится — варианты рядом</h1>
+    <span style="font-size: 13px; color: #555555;">{{note}}</span>
+  </div>
+  <p style="margin: 0 0 18px; font-size: 13px; line-height: 1.45; color: #555555; max-width: 1000px;">«Пусто» — как сейчас: ячейка без картинки, пока не готова настоящая. «Силуэт» — папка уже прочитана: столько карточек, сколько файлов она покажет, на каждой — тип файла; у файла — плашка на месте картинки и значок его типа в обычный размер. Ничего не бледное — не путается со скрытыми. Пустой папке промежуточной картинки не нужно: её пустой значок и есть готовый. «Готово» — что встанет на место.</p>
+  <div style="display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start;">
+    <sc-for list="{{panels}}" as="pn" hint-placeholder-count="2">
+      <div style="flex: none; border: 1px solid {{pn.sep}}; background: {{pn.listBg}}; color: {{pn.fg}};">
+        <div style="padding: 10px 14px; font-size: 14px; font-weight: 600; border-bottom: 1px solid {{pn.sep}}; background: {{pn.headBg}};">{{pn.title}}</div>
+        <div style="display: flex; border-bottom: 1px solid {{pn.sep}}; background: {{pn.headBg}};">
+          <div style="width: 160px; flex: none; padding: 8px 14px; box-sizing: border-box; font-size: 12px; color: {{pn.dim}};">Что</div>
+          <sc-for list="{{columns}}" as="col" hint-placeholder-count="4">
+            <div style="width: {{colW}}px; flex: none; padding: 8px 4px; box-sizing: border-box; text-align: center; font-size: 12px; font-weight: 600;">{{col.title}}</div>
+          </sc-for>
+        </div>
+        <sc-for list="{{pn.rows}}" as="r" hint-placeholder-count="9">
+          <div style="display: flex; border-bottom: 1px solid {{pn.sep}};">
+            <div style="width: 160px; flex: none; padding: 8px 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 2px;">
+              <div style="font-size: 13px; font-weight: 600;">{{r.title}}</div>
+              <div style="font-size: 12px; line-height: 1.35; color: {{pn.dim}};">{{r.desc}}</div>
+            </div>
+            <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="4">
+              <div style="width: {{colW}}px; height: {{rowH}}px; flex: none; box-sizing: border-box; display: flex; justify-content: center; align-items: center; background: {{pn.cellBg}};">
+                <div style="position: relative; width: {{c.w}}px; height: {{c.h}}px;">
+                  <sc-if value="{{c.folder}}" hint-placeholder-val="{{true}}">
+                    <dc-import name="Folder" folder="{{c.name}}" variant="Адаптивный" size="{{size}}" pick="Разные типы" walk="Прочитан весь — свежие" deep="Если своих нет" dark="{{pn.dark}}" appLook="Прозрачный с тенью" models="Как программы" pending="{{c.pending}}" loaded="{{c.shown}}" hint-size="100%,100%"></dc-import>
+                  </sc-if>
+                  <sc-if value="{{c.fileReady}}" hint-placeholder-val="{{false}}">
+                    <dc-import name="Thumb" kind="{{c.kind}}" tone="{{c.tone}}" fit="{{c.fit}}" hint-size="100%,100%"></dc-import>
+                  </sc-if>
+                  <sc-if value="{{c.filePending}}" hint-placeholder-val="{{false}}">
+                    <dc-import name="Pending" kind="{{c.kind}}" dark="{{pn.dark}}" hint-size="100%,100%"></dc-import>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"view":{"editor":"enum","options":["Плитка","Значки","Галерея"],"default":"Значки","section":"Вид"},"$preview":{"width":2500,"height":2700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const view = this.props.view ?? 'Значки';
+    const size = view === 'Плитка' ? 48 : view === 'Галерея' ? 216 : 96;
+    const gallery = view === 'Галерея';
+    const columns = [
+      { title: 'Пусто — сейчас', state: 'empty' },
+      { title: 'Силуэт', state: 'Силуэт' },
+      { title: 'Готово', state: 'ready' }
+    ];
+    const items = [
+      { title: 'Папка снимков', desc: 'RAW со свежими XMP', folder: 'raw' },
+      { title: 'Папка программы', desc: 'exe, руководство, readme', folder: 'Player' },
+      { title: 'Папка звуков', desc: 'ждёт волн трёх треков', folder: 'звуки' },
+      { title: 'Один файл', desc: 'папка с одной программой', folder: 'Messenger' },
+      { title: 'Пустая папка', desc: 'промежуточной нет', folder: 'пустая' },
+      { title: 'Снимок', desc: 'CR3', kind: 'photo', tone: 3 },
+      { title: 'Текстура', desc: 'PNG', kind: 'tex', tone: 0 },
+      { title: 'Трек', desc: 'MP3, волна', kind: 'wave', tone: 1 },
+      { title: 'Модель', desc: 'FBX', kind: 'model', tone: 0 },
+      { title: 'Текст', desc: 'TXT, лист', kind: 'text', tone: 2 },
+      { title: 'Программа', desc: 'EXE, свой значок', kind: 'app', tone: 3 }
+    ];
+    const cell = (it, state) => {
+      if (it.folder) {
+        return {
+          folder: true, name: it.folder, w: size, h: size,
+          shown: state !== 'empty', pending: state === 'Силуэт' ? 'Силуэт' : 'Нет',
+          fileReady: false, filePending: false
+        };
+      }
+      const fills = it.kind === 'photo' || it.kind === 'tex';
+      return {
+        folder: false, kind: it.kind, tone: it.tone,
+        w: size, h: it.kind === 'photo' ? Math.round(size * 2 / 3) : size,
+        fit: fills ? 'slice' : 'meet',
+        fileReady: state === 'ready', filePending: state === 'Силуэт'
+      };
+    };
+    const panel = (dark) => ({
+      title: dark ? 'Тёмная тема' : 'Светлая тема',
+      dark,
+      listBg: dark ? '#1E1E1E' : '#FAFAFA',
+      cellBg: gallery ? (dark ? '#1E1E1E' : '#6E6E6E') : (dark ? '#1E1E1E' : '#FAFAFA'),
+      headBg: dark ? '#262626' : '#EEEEEE',
+      fg: dark ? '#E0E0E0' : '#1A1A1A',
+      dim: dark ? '#BDBDBD' : '#555555',
+      sep: dark ? '#3A3A3A' : '#DDDDDD',
+      rows: items.map((it) => ({ title: it.title, desc: it.desc, cells: columns.map((c) => cell(it, c.state)) }))
+    });
+    return {
+      size,
+      colW: Math.max(110, size + 40),
+      rowH: size + 24,
+      columns,
+      panels: [panel(false), panel(true)],
+      note: view + ': картинка ' + size + ' px'
+    };
+  }
+}
+</script>
+</body>
+</html>

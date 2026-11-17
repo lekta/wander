@@ -210,7 +210,7 @@ public static partial class Strings {
     /// <summary>Папка</summary>
     public static string KindFolderNoun => Get(nameof(KindFolderNoun));
 
-    /// <summary>{0} · {1}</summary>
+    /// <summary>{0} {1}</summary>
     public static string TileFileLine => Get(nameof(TileFileLine));
 
     /// <summary>Переименовать</summary>
@@ -336,10 +336,10 @@ public static partial class Strings {
     /// <summary>Операций: {0} — {1} %</summary>
     public static string OperationMany => Get(nameof(OperationMany));
 
-    /// <summary>✓ {0}</summary>
+    /// <summary>✓{0}</summary>
     public static string OperationsFinishedOk => Get(nameof(OperationsFinishedOk));
 
-    /// <summary>⚠ {0}</summary>
+    /// <summary>⚠{0}</summary>
     public static string OperationsFinishedProblems => Get(nameof(OperationsFinishedProblems));
 
     /// <summary>готово {0}</summary>

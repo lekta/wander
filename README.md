@@ -1,6 +1,6 @@
 # Wander
 
-🌐 **English** · [Русский](README.ru.md)
+🌐 **English** [Русский](README.ru.md)
 
 **A media manager for Windows 10 and 11** - a file manager focused on comfort and media: stable, clear navigation, fast preview and comparison, batch operations, photo culling.
 

@@ -1,9 +1,11 @@
 # Changelog
 
-🌐 **Русский** · [English](CHANGELOG.en.md) (с версии 0.6)
+🌐 **Русский** [English](CHANGELOG.en.md) (с версии 0.6)
 
-Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
-версии — по [SemVer](https://semver.org/lang/ru/). Даты в ISO-формате.
+Версии — по [SemVer](https://semver.org/lang/ru/), даты в ISO-формате.
+С 0.6.2 версия — один список, «добавлено» или «исправлено» — в самом
+пункте, если важно; до неё — разделы [Keep a
+Changelog](https://keepachangelog.com/ru/1.1.0/).
 
 ## [0.6.1-beta] — 2026-11-09
 

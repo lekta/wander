@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Миниатюра файла</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 100%; height: 100%; position: relative; overflow: hidden;">
+  <sc-if value="{{isPhoto}}" hint-placeholder-val="{{true}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="{{par}}" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <defs>
+        <linearGradient id="{{gid}}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="{{p.sky1}}"></stop>
+          <stop offset="1" stop-color="{{p.sky2}}"></stop>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="100" height="100" fill="url(#{{gid}})"></rect>
+      <circle cx="{{p.sx}}" cy="{{p.sy}}" r="{{p.sr}}" fill="{{p.sun}}"></circle>
+      <polygon points="0,62 16,46 28,54 44,34 60,50 74,40 100,56 100,100 0,100" fill="{{p.m1}}"></polygon>
+      <polygon points="0,76 20,62 38,72 58,58 80,70 100,62 100,100 0,100" fill="{{p.m2}}"></polygon>
+      <rect x="0" y="88" width="100" height="12" fill="{{p.fg}}"></rect>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isTex}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="{{par}}" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <rect x="0" y="0" width="100" height="100" fill="{{tx.base}}"></rect>
+      <path d="{{blobsA}}" fill="{{tx.a}}"></path>
+      <path d="{{blobsB}}" fill="{{tx.b}}"></path>
+      <path d="{{blobsC}}" fill="{{tx.c}}"></path>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isWave}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="{{par}}" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <rect x="8" y="6" width="84" height="88" fill="#FFFFFF" stroke="#A8A8A8" stroke-width="0.7"></rect>
+      <path d="{{wavePeak}}" fill="#9CC3EE"></path>
+      <path d="{{waveBody}}" fill="#2B6CC4"></path>
+      <circle cx="22" cy="80" r="6.5" fill="#2B6CC4"></circle>
+      <polygon points="20,76.5 20,83.5 26,80" fill="#FFFFFF"></polygon>
+      <text x="32" y="82.5" font-size="7" font-family="Segoe UI, sans-serif" fill="#555555">{{waveLen}}</text>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isText}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="{{par}}" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <rect x="8" y="6" width="84" height="88" fill="#FFFFFF" stroke="#A8A8A8" stroke-width="0.7"></rect>
+      <path d="{{textBars}}" fill="#8C939C"></path>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isDoc}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="{{par}}" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <rect x="8" y="6" width="84" height="88" fill="#FFFFFF" stroke="#A8A8A8" stroke-width="0.7"></rect>
+      <rect x="16" y="13" width="44" height="5" fill="#2B4C7E"></rect>
+      <rect x="16" y="23" width="68" height="27" fill="#C7D6E8"></rect>
+      <polygon points="22,50 38,33 50,45 60,37 78,50" fill="#8FA8C4"></polygon>
+      <path d="{{docLines}}" fill="#9AA1AA"></path>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isModel}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="{{par}}" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <ellipse cx="50" cy="89" rx="26" ry="4" fill="#000000" fill-opacity="0.14"></ellipse>
+      <polygon points="{{m.top}}" fill="{{m.c1}}"></polygon>
+      <polygon points="{{m.left}}" fill="{{m.c2}}"></polygon>
+      <polygon points="{{m.right}}" fill="{{m.c3}}"></polygon>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isPage}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="{{par}}" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <path d="M26 10 H60 L74 24 V90 H26 Z" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="0.8"></path>
+      <path d="M60 10 V24 H74" fill="#ECECEC" stroke="#9E9E9E" stroke-width="0.8"></path>
+      <path d="{{glyphA}}" fill="{{glyphColorA}}"></path>
+      <path d="{{glyphB}}" fill="{{glyphColorB}}"></path>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isGlyph}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <g transform="translate(50 54) scale(1.5) translate(-50 -54)">
+        <path d="{{glyphA}}" fill="{{glyphColorA}}"></path>
+        <path d="{{glyphB}}" fill="{{glyphColorB}}"></path>
+      </g>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isApp}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <defs>
+        <linearGradient id="{{gid}}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="{{app.c1}}"></stop>
+          <stop offset="1" stop-color="{{app.c2}}"></stop>
+        </linearGradient>
+      </defs>
+      <path d="{{app.shape}}" fill="url(#{{gid}})" fill-rule="evenodd"></path>
+      <path d="{{app.glyph}}" fill="#FFFFFF" fill-rule="evenodd"></path>
+    </svg>
+  </sc-if>
+  <sc-if value="{{isStar}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" style="display: block; width: 100%; height: 100%;" aria-hidden="true">
+      <polygon points="{{star}}" fill="#FFC83D" stroke="#D99A12" stroke-width="2" stroke-linejoin="round"></polygon>
+    </svg>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kind":{"editor":"enum","options":["photo","tex","wave","text","doc","model","app","type","blank","star","glyph","none"],"default":"photo"},"tone":{"editor":"int","min":0,"max":6,"default":0},"fit":{"editor":"enum","options":["slice","meet","top"],"default":"slice"},"$preview":{"width":120,"height":120}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const kind = this.props.kind ?? 'photo';
+    const tone = Math.max(0, Number(this.props.tone ?? 0) || 0);
+    const fit = this.props.fit ?? 'slice';
+    if (!this._gid) {
+      this._gid = 'g' + Math.random().toString(36).slice(2, 9);
+    }
+    const par = fit === 'meet' ? 'xMidYMid meet' : fit === 'top' ? 'xMidYMin meet' : 'xMidYMid slice';
+    const photos = [
+      { sky1: '#E9776A', sky2: '#FBD38D', sun: '#FFF1C1', sx: 64, sy: 50, sr: 9, m1: '#8A4F6D', m2: '#4E2F4F', fg: '#2E1D33' },
+      { sky1: '#7FB8E6', sky2: '#DDEFF9', sun: '#FFFFFF', sx: 22, sy: 22, sr: 6, m1: '#7FA37E', m2: '#3F6E4C', fg: '#2C4F37' },
+      { sky1: '#8EC5EC', sky2: '#E4F2FB', sun: '#FFF6D8', sx: 78, sy: 24, sr: 7, m1: '#5D8FB8', m2: '#2F6A9C', fg: '#E2CFA0' },
+      { sky1: '#141B33', sky2: '#39477A', sun: '#EDEACB', sx: 72, sy: 24, sr: 5, m1: '#27304F', m2: '#131A2D', fg: '#0A0E19' },
+      { sky1: '#A7C4D9', sky2: '#F1E4CC', sun: '#FFFFFF', sx: 30, sy: 30, sr: 5, m1: '#C9874A', m2: '#8C4A26', fg: '#5A2E17' },
+      { sky1: '#B8CCE0', sky2: '#F2F6FA', sun: '#FFFFFF', sx: 70, sy: 26, sr: 6, m1: '#C9D5E0', m2: '#F4F7FA', fg: '#9AA9B7' }
+    ];
+    const texes = [
+      { base: '#8B5A3C', a: '#A66E47', b: '#6E432B', c: '#C08A5E' },
+      { base: '#8080F8', a: '#A9A9FF', b: '#5F5FD8', c: '#9090FF' },
+      { base: '#141414', a: '#33C85A', b: '#E8E8E8', c: '#1F7A38' },
+      { base: '#C99A7A', a: '#B07E60', b: '#E0B898', c: '#8D5E45' },
+      { base: '#7A7A7A', a: '#8E8E8E', b: '#5F5F5F', c: '#A3A3A3' }
+    ];
+    const models = [
+      { c1: '#8DB4E4', c2: '#5584C2', c3: '#3A6399', top: '50,18 82,34 50,50 18,34', left: '18,34 50,50 50,84 18,68', right: '50,50 82,34 82,68 50,84' },
+      { c1: '#D2D2D2', c2: '#A2A2A2', c3: '#767676', top: '50,12 70,22 50,32 30,22', left: '30,22 50,32 50,88 30,78', right: '50,32 70,22 70,78 50,88' },
+      { c1: '#A6DBA3', c2: '#64B267', c3: '#428F49', top: '50,26 86,40 50,54 14,40', left: '14,40 50,54 50,80 14,66', right: '50,54 86,40 86,66 50,80' }
+    ];
+    const circle = (cx, cy, r) => 'M' + (cx - r) + ' ' + cy + ' a' + r + ' ' + r + ' 0 1 0 ' + (2 * r) + ' 0 a' + r + ' ' + r + ' 0 1 0 ' + (-2 * r) + ' 0 Z ';
+    const spots = [[12, 14, 9], [34, 10, 7], [58, 18, 11], [84, 12, 8], [20, 40, 10], [46, 44, 8], [72, 40, 12], [92, 46, 6], [10, 70, 8], [32, 66, 11], [56, 72, 9], [80, 70, 10], [26, 92, 9], [64, 94, 10], [90, 90, 7]];
+    const shift = (tone * 7) % 15;
+    let blobsA = '', blobsB = '', blobsC = '';
+    spots.forEach(([x, y, r], i) => {
+      const k = (i + shift) % 3;
+      if (k === 0) { blobsA += circle(x, y, r); } else if (k === 1) { blobsB += circle(x, y, r * 0.8); } else { blobsC += circle(x, y, r * 0.6); }
+    });
+    let waveBody = '', wavePeak = '';
+    const n = 26;
+    for (let i = 0; i < n; i++) {
+      const x = 14 + i * (72 / n);
+      const a = 5 + 15 * Math.abs(Math.sin(i * 0.9 + tone * 1.7) * Math.cos(i * 0.37 + tone));
+      const pk = Math.min(30, a * 1.4);
+      wavePeak += 'M' + x.toFixed(1) + ' ' + (44 - pk).toFixed(1) + ' h1.8 v' + (2 * pk).toFixed(1) + ' h-1.8 Z ';
+      waveBody += 'M' + x.toFixed(1) + ' ' + (44 - a).toFixed(1) + ' h1.8 v' + (2 * a).toFixed(1) + ' h-1.8 Z ';
+    }
+    let textBars = '';
+    for (let line = 0; line < 12; line++) {
+      const y = 15 + line * 6.2;
+      let x = 16;
+      const last = line === 11 || line === 5;
+      const limit = last ? 52 : 84;
+      let w = 0;
+      while (x < limit - 4) {
+        w = 4 + ((line * 7 + Math.round(x) * 3 + tone * 5) % 13);
+        if (x + w > limit) { w = limit - x; }
+        textBars += 'M' + x.toFixed(1) + ' ' + y.toFixed(1) + ' h' + w.toFixed(1) + ' v2.6 h' + (-w).toFixed(1) + ' Z ';
+        x += w + 2.6;
+      }
+    }
+    let docLines = '';
+    [56, 62, 68, 74, 80, 86].forEach((y, i) => {
+      const w = i === 5 ? 34 : 68 - ((i * 9) % 14);
+      docLines += 'M16 ' + y + ' h' + w + ' v2.6 h' + (-w) + ' Z ';
+    });
+    const glyphs = [
+      ['M40 40 h20 v26 h-20 Z', '#E3B341', 'M48 40 h4 v3 h-4 Z M48 46 h4 v3 h-4 Z M48 52 h4 v3 h-4 Z M46 58 h8 v6 h-8 Z', '#8A6D1F'],
+      [circle(50, 56, 12), '#E8780C', 'M46 50 L46 62 L56 56 Z', '#FFFFFF'],
+      ['M36 44 h28 v2.6 h-28 Z M36 50 h24 v2.6 h-24 Z M36 56 h28 v2.6 h-28 Z M36 62 h18 v2.6 h-18 Z', '#2B6CC4', 'M0 0 Z', '#FFFFFF'],
+      ['M0 0 Z', '#FFFFFF', 'M0 0 Z', '#FFFFFF'],
+      // The types a placeholder stands for: a picture, a model, a program.
+      ['M36 44 h28 v20 h-28 Z', '#8EC5EC', 'M36 64 L45 53 L51 59 L57 51 L64 64 Z', '#4E8A5C'],
+      ['M50 42 L62 48 L62 62 L50 68 L38 62 L38 48 Z', '#5584C2', 'M50 42 L62 48 L50 54 L38 48 Z', '#A9C6EC'],
+      ['M36 42 h28 v22 h-28 Z', '#8FB3E8', 'M36 42 h28 v5 h-28 Z', '#2B4C7E']
+    ];
+    const g = kind === 'blank' ? glyphs[3] : glyphs[tone % glyphs.length];
+    let star = '';
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? 42 : 18;
+      const ang = -Math.PI / 2 + i * Math.PI / 5;
+      star += (50 + r * Math.cos(ang)).toFixed(1) + ',' + (54 + r * Math.sin(ang)).toFixed(1) + ' ';
+    }
+    const lengths = ['0:45', '2:13', '0:08'];
+    // A program's icon as the jumbo list hands it over: drawn on transparency,
+    // filling most of its square; the silhouettes differ - a rounded square,
+    // a circle, a ring, a shape with no square edge at all.
+    const rr = (x, y, w, h, r) => 'M' + (x + r) + ' ' + y + ' H' + (x + w - r) + ' Q' + (x + w) + ' ' + y + ' ' + (x + w) + ' ' + (y + r) + ' V' + (y + h - r) + ' Q' + (x + w) + ' ' + (y + h) + ' ' + (x + w - r) + ' ' + (y + h) + ' H' + (x + r) + ' Q' + x + ' ' + (y + h) + ' ' + x + ' ' + (y + h - r) + ' V' + (y + r) + ' Q' + x + ' ' + y + ' ' + (x + r) + ' ' + y + ' Z';
+    const apps = [
+      { c1: '#3CC2B4', c2: '#1F7F8C', shape: rr(12, 12, 76, 76, 14), glyph: circle(50, 50, 22) + circle(50, 50, 11) },
+      { c1: '#9A7BF0', c2: '#5B3FC4', shape: rr(12, 12, 76, 76, 20), glyph: 'M40 32 L70 50 L40 68 Z' },
+      { c1: '#F29A4A', c2: '#C2541E', shape: rr(16, 8, 68, 84, 10), glyph: 'M30 32 h40 v9 h-40 Z M30 46 h40 v9 h-40 Z M30 60 h26 v9 h-26 Z' },
+      { c1: '#5AB8F0', c2: '#1E7FD0', shape: circle(50, 50, 42), glyph: 'M28 50 L72 32 L62 70 L52 57 Z' },
+      { c1: '#F6C343', c2: '#E0457B', shape: circle(50, 50, 42) + circle(50, 50, 17), glyph: 'M0 0 Z' },
+      { c1: '#4BA8F0', c2: '#1A5FB4', shape: 'M10 38 L64 8 L90 20 V80 L64 92 L10 62 Z', glyph: 'M64 30 L40 50 L64 70 Z' }
+    ];
+    return {
+      par, gid: this._gid,
+      isPhoto: kind === 'photo', isTex: kind === 'tex', isWave: kind === 'wave', isText: kind === 'text',
+      isDoc: kind === 'doc', isModel: kind === 'model', isPage: kind === 'type' || kind === 'blank', isStar: kind === 'star',
+      isApp: kind === 'app', app: apps[tone % apps.length], isGlyph: kind === 'glyph',
+      p: photos[tone % photos.length], tx: texes[tone % texes.length], m: models[tone % models.length],
+      blobsA, blobsB, blobsC, waveBody, wavePeak, waveLen: lengths[tone % lengths.length], textBars, docLines,
+      glyphA: g[0], glyphColorA: g[1], glyphB: g[2], glyphColorB: g[3], star: star.trim()
+    };
+  }
+}
+</script>
+</body>
+</html>

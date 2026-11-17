@@ -11,7 +11,7 @@ namespace Wander.Harness;
 /// Entry point. Three commands:
 /// <list type="bullet">
 ///   <item><c>sandbox &lt;dir&gt; [--profiles a,b] [--photos N] [--big N] [--raw-mb N]</c> - generate test data.</item>
-///   <item><c>run &lt;scenario.json&gt; [--sandbox dir] [--out dir] [--in-place]</c> - drive the app through a scenario, on a desktop of its own (<see cref="HarnessDesktop"/>).</item>
+///   <item><c>run &lt;scenario.json&gt; [--sandbox dir] [--out dir] [--rebuild] [--minutes N] [--in-place]</c> - drive the app through a scenario, on a desktop of its own (<see cref="HarnessDesktop"/>).</item>
 ///   <item><c>selfcheck [--dir dir]</c> - generate a tiny sandbox and verify the generators against Core's readers.</item>
 /// </list>
 /// Exit codes: 0 ok, 2 scenario failed, 64 usage, 70 crashed.
@@ -101,7 +101,8 @@ public static class Program {
         StartFolder.Override(sandboxRoot);
         Wander.App.App.Headless = true;
 
-        var context = new RunContext(scenario, sandboxRoot, outDir, dataDir);
+        int? soakMinutes = options.Has("minutes") ? options.Int("minutes", 0) : null;
+        var context = new RunContext(scenario, sandboxRoot, outDir, dataDir, soakMinutes);
         var app = new HarnessApp(context);
         int code = app.Run();
         Console.WriteLine($"exit {code}: {Path.Combine(outDir, "report.md")}");
@@ -135,7 +136,7 @@ public static class Program {
         Console.Error.WriteLine(
             "usage:\n" +
             "  Wander.Harness sandbox <dir> [--profiles photos,raw,big,deep,names] [--photos N] [--big N] [--raw-mb N] [--raw N]\n" +
-            "  Wander.Harness run <scenario.json> [--sandbox <dir>] [--out <dir>] [--rebuild] [--in-place]\n" +
+            "  Wander.Harness run <scenario.json> [--sandbox <dir>] [--out <dir>] [--rebuild] [--minutes N] [--in-place]\n" +
             "  Wander.Harness selfcheck [--dir <dir>]");
 
         return 64;

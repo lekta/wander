@@ -1,6 +1,6 @@
 # Wander user guide
 
-🌐 [Русский](GUIDE.md) · **English**
+🌐 [Русский](GUIDE.md) **English**
 
 What Wander can do and how to use it.
 You can download the app from the link in the [README](../README.md); this guide is also on the website, one page per topic: [lekta.github.io/wander](https://lekta.github.io/wander/en/guide/).
@@ -189,7 +189,8 @@ In the tree, an archive appears among folders and expands the same way.
 
 - copy (`Ctrl+C`) and paste (`Ctrl+V`) into a folder, or drag, including onto a folder in the Folders pane; `Ctrl+Z` undoes the extraction;
 - **“Extract here”** in the menu of a file or of the archive itself extracts without asking into the folder that contains the archive; matching names aren't replaced, and the new item gets “(1)”;
-- “Extract…” asks for a folder first.
+- “Extract…” asks for a folder first;
+- **“Extract to new folder”**: drag archives with the **right mouse button** onto a folder, and each one is extracted into a new folder named after the archive; `Ctrl+Z` sends that folder to the Recycle Bin.
 
 You can also copy or drag files from an archive to other programs as usual.
 
@@ -469,8 +470,15 @@ The volume is shared by all files and is remembered between launches.
 **Spreadsheets** (CSV, TSV, Excel and OpenDocument) are shown as a grid, like in a spreadsheet app: sheets as tabs, columns as letters, rows as numbers; long text in a cell wraps.
 The `</>` button shows CSV and TSV as text.
 
-**3D models** rotate with the mouse, and the wheel zooms in.
+**3D models** rotate with the mouse, the wheel zooms in, and dragging with the middle button moves them.
 Wander remembers a model you rotated: it opens the same way next time, and its thumbnail shows it the same way too.
+Four buttons under the model:
+- **Lighting**: shading and shine, so you see the shape even on a dark model; with it off, you see the colors as they are, without shading.
+- **Texture**: colors and texture from the file; without it, the model is grey, like clay.
+- **Wireframe**: triangle edges over the model; very dense models (over 150,000 edges) don't have it.
+- **Back faces**: the reverse side of faces in pink, so you see faces turned inside out and the inside of open parts.
+
+The buttons stay as set until the window closes.
 
 **File in use.** If another program holds the file and it can't be read, the pane says so and names that program.
 
@@ -566,7 +574,7 @@ What the [Preview pane](#preview-pane) shows for each file type and what you can
 | GIF, WebP | The image with the loupe, like other images; animated ones in a player |
 | Video | A player: play and pause, repeat (on from the start for clips under three seconds), seeking; `Ctrl`+wheel to zoom 2× and 4×. Below it, a table read from the file itself (MP4, MOV, MKV, WebM, AVI): resolution, codec, color depth, HDR, frame rate, bitrate, up to four audio tracks, subtitles. WebM, OGV and whatever the built-in player can't open play in the system player. If neither can open it, the pane names the codec, and if an extension from the Store is missing (HEVC, AV1, VP9, MPEG-2, Ogg), its name and a button for its page |
 | Music | Cover art, title, artist, album, year, a player, and a line about the audio: codec, bitrate, sample rate, bit depth, channels. Below the card, the waveform: click to play from that spot, click while playing to stop; several selected tracks stack their waveforms. Tags are read from MP3, FLAC, M4A and M4B, WAV, Ogg and Opus; for other formats, the name and duration. The cover art comes from the file, or else from an image next to it (`Cover.jpg`, `folder.jpg`, `front.*`, one with the same name, or the only image in the folder). Cyrillic tags in Windows-1251 are read correctly |
-| 3D (STL, OBJ, glTF, GLB, PLY, 3MF, FBX, BLEND) | The model at a three-quarter angle: drag to rotate, wheel to zoom; Wander remembers a model you rotated, and the thumbnail shows it the same way. Triangle and vertex counts at the bottom. Colors come from the model file. The texture is the one the file names or, if it names none, a matching one by name next to the model or in a `textures` folder; you see it both in the pane and on the thumbnail. Only the color map is shown, no relief or metal. 3MF includes slicer projects, Bambu Studio and Orca among them; FBX, both binary and text. BLEND: from Blender 4, without modifiers, so a half with a mirror stays a half; `.blend1` backups open the same way, with a darker thumbnail. An FBX with only animation and no mesh isn't shown. DAE and DXF aren't supported |
+| 3D (STL, OBJ, glTF, GLB, PLY, 3MF, FBX, BLEND) | The model at a three-quarter angle: drag to rotate, wheel to zoom, middle-drag to move; Wander remembers a model you rotated, and the thumbnail shows it the same way. Triangle and vertex counts at the bottom. Colors come from the model file. The texture is the one the file names or, if it names none, a matching one by name next to the model or in a `textures` folder; you see it both in the pane and on the thumbnail. Only the color map is shown, no relief or metal. 3MF includes slicer projects, Bambu Studio and Orca among them; FBX, both binary and text. BLEND: from Blender 4, without modifiers, so a half with a mirror stays a half; `.blend1` backups open the same way, with a darker thumbnail. An FBX with only animation and no mesh isn't shown. DAE and DXF aren't supported |
 | Fonts (TTF, OTF, TTC) | Sample text in sizes from 12 to 48, the letters and digits the font has (for icon and symbol fonts, their characters), name, style, version, author. The font file stays free: you can rename or delete it without leaving the preview |
 | Spreadsheets (CSV, TSV, XLSX, XLSM, ODS) | A grid: sheets as tabs, columns as letters, rows as numbers, dates and percentages as in a spreadsheet app; long text wraps to the column width. The first 1000 rows and 100 columns are shown. The `</>` button shows CSV and TSV as text |
 | Text | The encoding is detected automatically, including 1251 and 866. A large file is shown from the start, with “… showing the start of the file, 12 MB in total” at the bottom. Subtitles, playlists, `.nfo`, contacts and calendars are shown as text too |
@@ -655,7 +663,7 @@ A folder among the files doesn't open this way; to make it open, turn on “Open
 Near the window edge, the files scroll by themselves, faster the farther past the edge you go.
 You can drag folders from the tree too.
 
-**Dragging with the right mouse button** opens a menu after the drop: copy, move, create shortcuts, plus “Convert” and “My actions”, whose results land right in that folder.
+**Dragging with the right mouse button** opens a menu after the drop: for archives, “Extract to new folder” comes first, then copy, move, create shortcuts, plus “Convert” and “My actions”, whose results land right in that folder.
 The item in bold is what a normal drop would do.
 
 <img src="screenshots/context_actions_with_folder.webp" width="480" alt="The menu after dragging with the right mouse button onto another folder">
@@ -738,7 +746,7 @@ The progress also shows on Wander's taskbar button: the bar runs while the total
 - **The computer doesn't go to sleep** while an operation is running; the screen turns off as usual.
 
 **Finished operations** stay in the operations panel until you dismiss them: you see how each one ended and how many files are done, failed and checked.
-When nothing is running, the status bar shows the result as icons, for example “✓ 3 · ⚠ 1”.
+When nothing is running, the status bar shows the result as icons, for example “✓3 ⚠1”.
 
 - “Details” lists the files that failed, with the reason.
 - “Retry” repeats only what failed or was canceled.
@@ -1194,7 +1202,7 @@ After operations and dialogs, the keyboard stays where it was: after deleting, t
 | Drag and hold over a folder | In a pane, a collapsed folder expands; in the files, the folder opens only if “Open a folder when a dragged file hovers over it” is on; at the edge, the list scrolls, faster the farther past the edge |
 | Drag to the “+” zone under Bookmarks | Add the folder to Bookmarks |
 | `Shift` / `Ctrl` / `Alt` while dragging | Move / copy / `.lnk` shortcut |
-| Right-drag | Menu at the drop point: copy, move, shortcuts, “Convert” and “My actions”; in bold, what a normal drop would do |
+| Right-drag | Menu at the drop point: “Extract to new folder” for archives, copy, move, shortcuts, “Convert” and “My actions”; in bold, what a normal drop would do |
 | Left button on an image in the Preview pane | Loupe |
 | `Ctrl`+wheel *over a photo* | Zoom in steps (50 / 100 / 200 / 400%) around the point under the pointer; in the Preview pane and in full screen |
 | `Ctrl`+wheel *over a video* | Zoom 2× / 4× under the pointer |

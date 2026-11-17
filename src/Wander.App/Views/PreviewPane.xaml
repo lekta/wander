@@ -248,6 +248,82 @@
         </DrawingImage>
 
         <!--
+            The model's switches (2026-11-11), drawn as the helpers': light -
+            a shaded ball with its shine; the file's paint - a checkerboard;
+            the wireframe - a square in triangles.
+        -->
+        <DrawingImage x:Key="IconModelLight">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <RadialGradientBrush GradientOrigin="0.36,0.32" Center="0.4,0.38" RadiusX="0.75" RadiusY="0.75">
+                                <GradientStop Color="#FFFFFF" Offset="0"/>
+                                <GradientStop Color="#C4C4C4" Offset="0.22"/>
+                                <GradientStop Color="#333333" Offset="1"/>
+                            </RadialGradientBrush>
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#5A5A5A" Thickness="0.8"/>
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="8,8" RadiusX="6" RadiusY="6"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <DrawingImage x:Key="IconModelTexture">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <DrawingGroup>
+                        <DrawingGroup.ClipGeometry>
+                            <RectangleGeometry Rect="1.5,1.5,13,13" RadiusX="2" RadiusY="2"/>
+                        </DrawingGroup.ClipGeometry>
+                        <GeometryDrawing Brush="#E6CFA8" Geometry="M1.5,1.5 L14.5,1.5 L14.5,14.5 L1.5,14.5 Z"/>
+                        <GeometryDrawing Brush="#9A4E2A"
+                                         Geometry="M1.5,1.5 h4.33 v4.33 h-4.33 Z M10.17,1.5 h4.33 v4.33 h-4.33 Z M5.83,5.83 h4.34 v4.34 h-4.34 Z
+                                                   M1.5,10.17 h4.33 v4.33 h-4.33 Z M10.17,10.17 h4.33 v4.33 h-4.33 Z"/>
+                    </DrawingGroup>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <DrawingImage x:Key="IconModelWire">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing Geometry="M2,2.5 L14,2.5 L14,13.5 L2,13.5 Z M2,8 L14,8 M8,2.5 L8,13.5 M2,13.5 L14,2.5 M2,8 L8,2.5 M8,13.5 L14,8">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#7A7A7A" Thickness="1" LineJoin="Round"/>
+                        </GeometryDrawing.Pen>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <DrawingImage x:Key="IconModelBack">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="Transparent" Geometry="M0,0 L16,0 L16,16 L0,16 Z"/>
+                    <GeometryDrawing Brush="#C4C4C4" Geometry="M2,2 L7,2 L14,9 L14,14 L2,14 Z">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#6A6A6A" Thickness="0.8" LineJoin="Round"/>
+                        </GeometryDrawing.Pen>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#FF4FA3" Geometry="M7,2 L7,9 L14,9 Z">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#A0285E" Thickness="0.8" LineJoin="Round"/>
+                        </GeometryDrawing.Pen>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <!--
             A review helper's switch (RAWHELPERS): a picture of what it
             does, the words in the tooltip. Framed on a grey plate whether on
             or off (2026-10-07): it reads as a button over a dark picture and
@@ -303,6 +379,15 @@
             is the palette's: the picture's bar is in a theme of its own
             (ThemeScope), the footer in the window's.
         -->
+        <!-- The wireframe's switch: dimmed where the model has too many edges for one (MeshWire.MaxEdges). -->
+        <Style x:Key="ModelWireToggle" TargetType="ToggleButton" BasedOn="{StaticResource HelperToggle}">
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="HelperTextToggle" TargetType="ToggleButton" BasedOn="{StaticResource HelperToggle}">
             <Setter Property="Width" Value="Auto"/>
             <Setter Property="FontSize" Value="10"/>
@@ -1099,9 +1184,8 @@
                         The camera is placed in code-behind: where it
                         belongs depends on how big the model is, and that
                         is not known until the file has been read. Orbit is
-                        left-drag, zoom is the wheel — the two gestures a
-                        viewer has to have, and no more, because this is a
-                        preview and not a viewport.
+                        left-drag, pan is middle-drag (2026-11-11), zoom is
+                        the wheel - a preview, not a modelling viewport.
                     -->
                     <Grid Visibility="{Binding Kind, Converter={StaticResource EnumToVisibility}, ConverterParameter=Model}">
                         <Grid.RowDefinitions>
@@ -1113,6 +1197,8 @@
                                 ClipToBounds="True"
                                 MouseLeftButtonDown="Model_MouseDown"
                                 MouseLeftButtonUp="Model_MouseUp"
+                                MouseDown="Model_PanDown"
+                                MouseUp="Model_PanUp"
                                 MouseMove="Model_MouseMove"
                                 MouseWheel="Model_MouseWheel">
                             <Viewport3D x:Name="ModelViewport" ClipToBounds="True"
@@ -1124,17 +1210,20 @@
                                     <ModelVisual3D.Content>
                                         <Model3DGroup>
                                             <!--
-                                                One directional light plus a
-                                                dim ambient one: a single
-                                                light leaves everything
-                                                facing away from it pure
-                                                black, which on an
-                                                untextured solid reads as a
-                                                hole in the model.
+                                                A studio's three (2026-11-11):
+                                                the key from above left in
+                                                front, a dim fill from the
+                                                right, a rim from behind that
+                                                draws the outline; and a dim
+                                                ambient, so nothing facing
+                                                away is a hole in the model.
+                                                The shine (ModelLook) is what
+                                                shows a dark model's volume.
                                             -->
                                             <AmbientLight Color="{StaticResource ModelAmbientLight}"/>
-                                            <DirectionalLight x:Name="ModelKeyLight" Color="{StaticResource ModelKeyLight}" Direction="-0.5,-1,-1"/>
-                                            <DirectionalLight Color="{StaticResource ModelFillLight}" Direction="1,0.5,0.8"/>
+                                            <DirectionalLight Color="{StaticResource ModelKeyLight}" Direction="0.45,-0.6,-1"/>
+                                            <DirectionalLight Color="{StaticResource ModelFillLight}" Direction="-0.9,-0.15,-0.5"/>
+                                            <DirectionalLight Color="{StaticResource ModelRimLight}" Direction="-0.2,-0.4,1"/>
                                             <!--
                                                 The model's drawables, filled
                                                 from code-behind: how many
@@ -1166,11 +1255,36 @@
                                 </ModelVisual3D>
                             </Viewport3D>
                         </Border>
-                        <TextBlock Grid.Row="1"
-                                   Text="{Binding ModelDetail}"
-                                   Margin="8,4,8,6"
-                                   FontSize="11" Foreground="{DynamicResource TextDim}"
-                                   HorizontalAlignment="Center"/>
+                        <!-- The counts, and the model's switches on the right, as the helpers' under a picture. -->
+                        <DockPanel Grid.Row="1" Margin="8,4,6,6">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <ToggleButton Style="{StaticResource HelperToggle}"
+                                              IsChecked="{Binding ModelLit}"
+                                              ToolTip="{x:Static res:Strings.ModelLightTip}">
+                                    <Image Source="{StaticResource IconModelLight}" Width="16" Height="16"/>
+                                </ToggleButton>
+                                <ToggleButton Style="{StaticResource HelperToggle}"
+                                              IsChecked="{Binding ModelTextured}"
+                                              ToolTip="{x:Static res:Strings.ModelTextureTip}">
+                                    <Image Source="{StaticResource IconModelTexture}" Width="16" Height="16"/>
+                                </ToggleButton>
+                                <ToggleButton Style="{StaticResource ModelWireToggle}"
+                                              IsChecked="{Binding ModelWireOn}"
+                                              IsEnabled="{Binding HasModelWire}"
+                                              ToolTipService.ShowOnDisabled="True"
+                                              ToolTip="{x:Static res:Strings.ModelWireTip}">
+                                    <Image Source="{StaticResource IconModelWire}" Width="16" Height="16"/>
+                                </ToggleButton>
+                                <ToggleButton Style="{StaticResource HelperToggle}"
+                                              IsChecked="{Binding ModelBackOn}"
+                                              ToolTip="{x:Static res:Strings.ModelBackTip}">
+                                    <Image Source="{StaticResource IconModelBack}" Width="16" Height="16"/>
+                                </ToggleButton>
+                            </StackPanel>
+                            <TextBlock Text="{Binding ModelDetail}"
+                                       FontSize="11" Foreground="{DynamicResource TextDim}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </DockPanel>
                     </Grid>
 
                     <!--

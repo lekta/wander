@@ -63,6 +63,9 @@ public sealed record ContextMenuTarget {
     /// </summary>
     public bool IsReadOnlyLocation { get; init; }
 
+    /// <summary>A panel row that is an archive itself: read-only as a place, but "Удалить" applies to the file.</summary>
+    public bool IsArchiveFile { get; init; }
+
     public bool CanPaste { get; init; }
 
     /// <summary>

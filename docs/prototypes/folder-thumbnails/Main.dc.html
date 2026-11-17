@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Значки папок — варианты рядом</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 100%; padding: 28px 32px 48px; background: {{pageBg}}; color: {{fg}}; font-family: 'Segoe UI', system-ui, sans-serif;">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 18px;">
+    <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Значки папок — варианты рядом</h1>
+    <span style="font-size: 13px; color: {{dim}};">{{sizeNote}}</span>
+  </div>
+  <div style="overflow-x: auto; border: 1px solid {{sep}}; background: {{listBg}};">
+    <div style="width: max-content;">
+      <div style="display: flex; border-bottom: 1px solid {{sep}}; background: {{headBg}};">
+        <div style="width: 230px; flex: none; padding: 10px 14px; box-sizing: border-box; font-size: 12px; color: {{dim}};">Папка</div>
+        <sc-for list="{{columns}}" as="col" hint-placeholder-count="5">
+          <div style="width: {{colW}}px; flex: none; padding: 10px 8px; box-sizing: border-box; text-align: center; font-size: 12px; font-weight: 600;">{{col.title}}</div>
+        </sc-for>
+      </div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="9">
+        <div style="display: flex; border-bottom: 1px solid {{sep}};">
+          <div style="width: 230px; flex: none; padding: 12px 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 4px;">
+            <div style="font-size: 13px; font-weight: 600;">{{r.title}}</div>
+            <div style="font-size: 12px; line-height: 1.35; color: {{dim}};">{{r.desc}}</div>
+          </div>
+          <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="5">
+            <div style="width: {{colW}}px; flex: none; padding: 12px 0; box-sizing: border-box; display: flex; justify-content: center; align-items: center; background: {{cellBg}};">
+              <div style="width: {{px}}px; height: {{px}}px;">
+                <dc-import name="Folder" folder="{{c.folder}}" variant="{{c.variant}}" size="{{px}}" pick="{{pick}}" walk="{{walk}}" deep="{{deep}}" dark="{{dark}}" hint-size="100%,100%"></dc-import>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;section&quot;:&quot;Вид&quot;},&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Значки&quot;,&quot;Плитка&quot;,&quot;Галерея&quot;],&quot;default&quot;:&quot;Значки&quot;,&quot;section&quot;:&quot;Вид&quot;},&quot;pick&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Разные типы&quot;,&quot;Картинки вперёд&quot;,&quot;Как Проводник&quot;],&quot;default&quot;:&quot;Разные типы&quot;,&quot;section&quot;:&quot;Отбор&quot;},&quot;walk&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Прочитан весь — свежие&quot;,&quot;Не успел — первые по имени&quot;],&quot;default&quot;:&quot;Прочитан весь — свежие&quot;,&quot;section&quot;:&quot;Отбор&quot;},&quot;deep&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Не смотреть&quot;,&quot;Если своих нет&quot;],&quot;default&quot;:&quot;Если своих нет&quot;,&quot;section&quot;:&quot;Отбор&quot;},&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1400}}">
+class Component extends DCLogic {
+  renderVals() {
+    const dark = !!(this.props.dark ?? false);
+    const view = this.props.view ?? 'Значки';
+    const px = view === 'Плитка' ? 48 : view === 'Галерея' ? 216 : 96;
+    const colW = Math.max(150, px + 40);
+    const variants = ['Сейчас (оболочка)', 'Лист', 'Каскад', '2×2'];
+    const folders = [
+      ['raw', 'raw', '23 CR3 и 14 XMP / PP3; свежее всех — XMP'],
+      ['textures', 'textures', '6 PNG: альбедо, нормали, маски'],
+      ['звуки', 'звуки', 'MP3 и WAV, без обложек'],
+      ['модели', 'модели', 'FBX, OBJ, STL и свежая TGA-текстура'],
+      ['разное', 'разное', 'снимок, модель, звук, текст, INI; свежее всех — ZIP'],
+      ['docs', 'docs', 'DOCX и три текста; свежее всех — TXT'],
+      ['Viewer', 'Viewer', 'Viewer.exe, Updater.exe, unins000.exe, DLL, readme; свежее всех — INI'],
+      ['_misc', '_misc', 'только подпапки и ZIP'],
+      ['пустая', 'пустая', 'ничего'],
+      ['Проект', 'Проект', 'desktop.ini со своим значком']
+    ];
+    const gallery = view === 'Галерея';
+    const listBg = dark ? '#1E1E1E' : '#FAFAFA';
+    return {
+      dark, px, colW,
+      pick: this.props.pick ?? 'Разные типы',
+      walk: this.props.walk ?? 'Прочитан весь — свежие',
+      deep: this.props.deep ?? 'Если своих нет',
+      sizeNote: view === 'Плитка' ? 'Плитка: значок 48 px из ступени 96' : gallery ? 'Галерея: картинка 216 px из ступени 256, фон галереи' : 'Значки: картинка 96 px из ступени 256',
+      pageBg: dark ? '#202020' : '#F3F3F3',
+      listBg,
+      headBg: dark ? '#262626' : '#EEEEEE',
+      cellBg: gallery ? (dark ? '#1E1E1E' : '#6E6E6E') : listBg,
+      fg: dark ? '#E0E0E0' : '#1A1A1A',
+      dim: dark ? '#BDBDBD' : '#555555',
+      sep: dark ? '#3A3A3A' : '#DDDDDD',
+      columns: variants.map((v) => ({ title: v })),
+      rows: folders.map(([id, title, desc]) => ({
+        title, desc,
+        cells: variants.map((v) => ({ folder: id, variant: v }))
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

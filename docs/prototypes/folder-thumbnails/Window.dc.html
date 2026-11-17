@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Wander — папка с подпапками</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.tile{outline:none}
+.t-light .tile:not(.sel):hover{background:#E5F3FB !important;border-color:#D2ECF8 !important}
+.t-dark .tile:not(.sel):hover{background:#2A2D30 !important;border-color:#383C40 !important}
+.t-gal .tile:not(.sel):hover{background:#7C7C7C !important;border-color:#8A8A8A !important}
+.t-galdark .tile:not(.sel):hover{background:#2C2C2C !important;border-color:#3A3A3A !important}
+.tbtn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;color:inherit;padding:0;cursor:default}
+.t-light .tbtn:hover,.t-gal .tbtn:hover{background:#E5E5E5}
+.t-dark .tbtn:hover,.t-galdark .tbtn:hover{background:#333333}
+</style>
+</helmet>
+<div class="{{themeClass}}" style="box-sizing: border-box; height: 100%; min-height: 640px; display: flex; flex-direction: column; background: {{chrome}}; color: {{fg}}; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px;">
+  <div style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid {{sep}}; flex-wrap: wrap;">
+    <button type="button" class="tbtn" aria-label="Обновить" onClick="{{reload}}">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M13 8a5 5 0 1 1-1.5-3.6"></path>
+        <path d="M13 2.5v3h-3"></path>
+      </svg>
+    </button>
+    <div style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid {{sep}}; background: {{fieldBg}}; min-width: 0; flex: 1 1 320px;">
+      <span>D:</span><span style="color: {{dim}};">›</span><span>_ inbox</span><span style="color: {{dim}};">›</span><span>_на разбор</span>
+    </div>
+  </div>
+  <div style="flex: 1 1 auto; overflow: auto; background: {{listBg}}; color: {{listFg}}; padding: 6px; min-height: 0;">
+    <div style="display: flex; flex-wrap: wrap; align-content: flex-start;">
+      <sc-for list="{{items}}" as="it" hint-placeholder-count="15">
+        <button type="button" class="tile {{it.cls}}" onClick="{{it.pick}}" aria-label="{{it.label}}" style="box-sizing: border-box; width: {{v.cellW}}px; margin: {{v.margin}}px; padding: {{v.pad}}; border: 1px solid {{it.bd}}; background: {{it.bg}}; display: flex; flex-direction: {{v.dir}}; align-items: center; gap: {{v.gap}}px; text-align: {{v.align}}; color: inherit; font: inherit; cursor: default;">
+          <div style="width: {{v.img}}px; height: {{v.img}}px; flex: none; margin: {{v.imgM}}; display: flex; align-items: center; justify-content: center;">
+            <sc-if value="{{it.isFolder}}" hint-placeholder-val="{{true}}">
+              <dc-import name="Folder" folder="{{it.folder}}" variant="{{it.variant}}" size="{{v.img}}" pick="{{pick}}" walk="{{walk}}" deep="{{deep}}" dark="{{darkIcons}}" loaded="{{it.loaded}}" hint-size="{{v.hint}}"></dc-import>
+            </sc-if>
+            <sc-if value="{{it.showFile}}" hint-placeholder-val="{{false}}">
+              <div style="width: {{it.fw}}px; height: {{it.fh}}px;">
+                <dc-import name="Thumb" kind="{{it.kind}}" tone="{{it.tone}}" fit="{{it.fit}}" hint-size="100%,100%"></dc-import>
+              </div>
+            </sc-if>
+          </div>
+          <div style="width: {{v.textW}}; min-width: 0; box-sizing: border-box; padding: {{v.textPad}}; display: flex; flex-direction: column; gap: 1px;">
+            <div style="font-size: {{v.fs}}px; line-height: {{v.lh}}px; max-height: {{v.maxH}}px; overflow: hidden; word-break: break-word; {{v.nameExtra}}">{{it.label}}</div>
+            <sc-if value="{{v.isTiles}}" hint-placeholder-val="{{false}}">
+              <div style="font-size: 11px; line-height: 15px; color: {{dim}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{it.kindText}}</div>
+            </sc-if>
+          </div>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"section":"Вид"},"view":{"editor":"enum","options":["Значки","Плитка","Галерея"],"default":"Значки","section":"Вид"},"variant":{"editor":"enum","options":["Адаптивный","Лист","Каскад","2×2","Сейчас (оболочка)"],"default":"Адаптивный","section":"Вид"},"pick":{"editor":"enum","options":["Разные типы","Картинки вперёд","Как Проводник"],"default":"Разные типы","section":"Отбор"},"walk":{"editor":"enum","options":["Прочитан весь — свежие","Не успел — первые по имени"],"default":"Прочитан весь — свежие","section":"Отбор"},"deep":{"editor":"enum","options":["Не смотреть","Если своих нет"],"default":"Если своих нет","section":"Отбор"},"build":{"editor":"enum","options":["Фоном у видимых","Только посещённые","Выключено"],"default":"Фоном у видимых","section":"Когда собирать"},"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 2, shown: null };
+  }
+
+  componentWillUnmount() {
+    if (this._timer) {
+      clearInterval(this._timer);
+    }
+  }
+
+  renderVals() {
+    const dark = !!(this.props.dark ?? false);
+    const view = this.props.view ?? 'Значки';
+    const variant = this.props.variant ?? 'Адаптивный';
+    const build = this.props.build ?? 'Фоном у видимых';
+    const gallery = view === 'Галерея';
+    const tiles = view === 'Плитка';
+    const entries = [
+      { label: '_misc', folder: '_misc' }, { label: 'docs', folder: 'docs' }, { label: 'raw', folder: 'raw' },
+      { label: 'textures', folder: 'textures' }, { label: 'звуки', folder: 'звуки' }, { label: 'модели', folder: 'модели' },
+      { label: 'Проект', folder: 'Проект' }, { label: 'пустая', folder: 'пустая' }, { label: 'разное', folder: 'разное' },
+      { label: 'Viewer', folder: 'Viewer' },
+      { label: 'drone45.mp3', kind: 'wave', tone: 1, kindText: 'Звук MP3' },
+      { label: 'Hero_Albedo.png', kind: 'tex', tone: 0, kindText: 'Изображение PNG' },
+      { label: 'IMG_0931.CR3', kind: 'photo', tone: 3, kindText: 'Снимок RAW' },
+      { label: 'notes.txt', kind: 'text', tone: 2, kindText: 'Текст' },
+      { label: 'site manual.zip', kind: 'type', tone: 0, kindText: 'Архив ZIP' }
+    ];
+    const visited = { raw: 1, textures: 1, docs: 1 };
+    const v = tiles
+      ? { cellW: 260, margin: 4, pad: '6px', dir: 'row', gap: 8, align: 'left', img: 48, imgM: '0', textW: 'auto', textPad: '0', fs: 12, lh: 16, maxH: 16, nameExtra: 'white-space: nowrap; text-overflow: ellipsis;', isTiles: true, hint: '48px,48px' }
+      : gallery
+        ? { cellW: 220, margin: 4, pad: '0 0 3px', dir: 'column', gap: 0, align: 'center', img: 216, imgM: '2px 0', textW: '100%', textPad: '0 6px', fs: 11, lh: 15, maxH: 15, nameExtra: 'white-space: nowrap; text-overflow: ellipsis;', isTiles: false, hint: '216px,216px' }
+        : { cellW: 132, margin: 2, pad: '0 0 3px', dir: 'column', gap: 0, align: 'center', img: 96, imgM: '2px 0', textW: '100%', textPad: '0 4px', fs: 12, lh: 17, maxH: 51, nameExtra: '', isTiles: false, hint: '96px,96px' };
+    const theme = gallery ? (dark ? 'galdark' : 'gal') : (dark ? 'dark' : 'light');
+    const sel = {
+      light: ['#CCE8FF', '#AFD9F2'], dark: ['#1E3F5C', '#2F5D85'],
+      gal: ['#8E94A6', '#A9AEC2'], galdark: ['#3C4150', '#575D70']
+    }[theme];
+    const listBg = gallery ? (dark ? '#1E1E1E' : '#6E6E6E') : (dark ? '#1E1E1E' : '#FAFAFA');
+    const shown = this.state.shown;
+    const items = entries.map((e, i) => {
+      const isSel = this.state.sel === i;
+      const loaded = shown === null || i < shown;
+      const isFolder = !!e.folder;
+      const useShell = build === 'Выключено' || (build === 'Только посещённые' && !visited[e.folder]);
+      const S = v.img;
+      const fw = S;
+      const fh = e.kind === 'photo' ? Math.round(S * 2 / 3) : S;
+      return {
+        ...e, isFolder, loaded, showFile: !isFolder && loaded,
+        variant: useShell ? 'Сейчас (оболочка)' : variant,
+        kindText: e.kindText ?? 'Папка',
+        fw, fh, fit: e.kind === 'photo' || e.kind === 'tex' ? 'slice' : 'meet',
+        cls: isSel ? 'sel' : '',
+        bg: isSel ? sel[0] : 'transparent',
+        bd: isSel ? sel[1] : 'transparent',
+        pick: () => this.setState({ sel: i })
+      };
+    });
+    const reload = () => {
+      if (this._timer) {
+        clearInterval(this._timer);
+      }
+      this.setState({ shown: 0 });
+      this._timer = setInterval(() => {
+        const next = (this.state.shown ?? entries.length) + 1;
+        if (next > entries.length) {
+          clearInterval(this._timer);
+          this._timer = null;
+          this.setState({ shown: null });
+        } else {
+          this.setState({ shown: next });
+        }
+      }, 90);
+    };
+    return {
+      items, v, reload,
+      themeClass: 't-' + theme,
+      darkIcons: dark,
+      pick: this.props.pick ?? 'Разные типы',
+      walk: this.props.walk ?? 'Прочитан весь — свежие',
+      deep: this.props.deep ?? 'Если своих нет',
+      chrome: dark ? '#202020' : '#F3F3F3',
+      fieldBg: dark ? '#2B2B2B' : '#FFFFFF',
+      listBg,
+      fg: dark ? '#E0E0E0' : '#1A1A1A',
+      listFg: gallery ? (dark ? '#E0E0E0' : '#F2F2F2') : (dark ? '#E0E0E0' : '#1A1A1A'),
+      dim: dark ? '#BDBDBD' : '#555555',
+      sep: dark ? '#3A3A3A' : '#DDDDDD'
+    };
+  }
+}
+</script>
+</body>
+</html>

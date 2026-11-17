@@ -8,9 +8,9 @@
 ## Коротко
 
 ```pwsh
-.\tools\publish.ps1 -Run     # релизный exe, погонять руками
+.\tools\publish.ps1 -Run     # человек; сделано на подготовке (PRERELEASE, шаг 5)
 # прочитать замеры из логов этого прогона (см. ниже)
-.\tools\release-metrics.ps1 -Version 0.3.0   # снимок версии в docs/measurements/
+.\tools\release-metrics.ps1 -Version 0.3.0   # сделано на подготовке (шаг 6), не повторять
 .\tools\version.ps1 0.3.0     # поднять версию везде
 # заполнить TODO в docs/CHANGELOG.md, перевести секцию в CHANGELOG.en.md, сверить README
 .\tools\check.bat
@@ -19,9 +19,12 @@ git tag v0.3.0
 git push origin master --follow-tags
 ```
 
+Проверка exe в Microsoft (WDSI) из процедуры убрана (2026-11-10) —
+SmartScreen и подпись: [SIGNING.md](SIGNING.md).
+
 Пуш тега `v*` запускает `release.yml` — CI собирает и публикует сам. Когда
-релиз опубликован — тег `site-*` (`git tag site-2026-10-01`, `git push
-origin site-2026-10-01`): кнопка «Скачать» на сайте берёт последний тег
+релиз опубликован — тег `site-*` (`git tag site-r0.6.1`, `git push
+origin site-r0.6.1`): кнопка «Скачать» на сайте берёт последний тег
 `v*` при сборке и без этого предлагает прошлую версию (SITE, «Деплой»).
 
 ## Версия — в четырёх местах, трёх форматах
@@ -49,10 +52,10 @@ master по тегу `site-*` и может опережать установл�
 ## Скрипты
 
 - `tools\publish.ps1 [-Run] [-Install [-InstallDir <папка>]]` — тот же
-  набор ключей, что у CI (Release, win-x64, self-contained, один файл,
+  набор ключей, что у CI (кроме `-Install`: без `WanderRelease`; Release, win-x64, self-contained, один файл,
   сжатие); печатает размер, версию и SHA256. `dotnet run` и Rider дают
   Debug — стартует медленнее и ведёт себя иначе. В Rider — конфигурации
-  «Publish release exe», «Run release exe», «Publish and install».
+  `.run/`: «Run Release» (`-Run`), «Install Release» (`-Install`).
   `-Install` кладёт exe в `C:\Programs\Wander` (или в `-InstallDir`) —
   рабочую копию человека: запущенные оттуда экземпляры закрываются
   штатно до подмены (однофайловый exe дочитывает сборки из себя по пути —
@@ -62,22 +65,22 @@ master по тегу `site-*` и может опережать установл�
   устанавливает.
 - `tools\version.ps1 <MAJOR.MINOR.PATCH> [-Suffix rc1|''] [-DryRun]` —
   проставляет три поля в `Directory.Build.props`, вставляет в CHANGELOG и
-  CHANGELOG.en секцию с датой и заготовками `### Added` / `### Fixed`
-  (`TODO`), добавляет сноску на будущий Release, печатает ручные шаги. Не коммитит, не тегает,
-  не пушит. Падает, если версия не в формате, секция уже есть или якоря в
-  файлах не найдены.
+  CHANGELOG.en секцию с датой и заготовкой списка (`- TODO`), добавляет сноску на будущий Release, обнуляет
+  `src/Wander.App/build-number.txt`, печатает ручные шаги. Не коммитит, не тегает,
+  не пушит. Падает, если версия не в формате, секция уже есть или якоря
+  русского CHANGELOG не найдены (у английского — не обязательны).
 
 ## Замеры перед релизом
 
 Логи сессий — единственный источник про поведение у живого пользователя на
 живых папках; после релиза те же цифры становятся багом. **Только на
 релизной сборке** (`publish.ps1 -Run`): Debug несравним с PERFORMANCE.md.
-Погонять минут десять по своим папкам с галереей и просмотром, читать логи
-**этого** прогона (`%LOCALAPPDATA%\Wander\logs`):
+Костяк человека (PRERELEASE, шаг 5) по своим папкам, читать логи **этого**
+прогона (`%LOCALAPPDATA%\Wander\logs`); пороги — QA, «Метрики и пороги»:
 
 | Строка | О чём | Плохо |
 |---|---|---|
-| `Startup: first frame N ms` | первый кадр | заметно хуже PERFORMANCE |
+| `Startup: first frame N ms` | первый кадр | медиана выше базлайна прошлой версии + 20 % |
 | `PERF ui.stall` | UI не рисовал | одиночные > 400 мс, частые > 100 |
 | `PERF bg.*` | фон: миниатюры, обложки, shell | новая категория |
 | `Folder listed in N ms` | медленное перечисление | секунды на сотнях файлов |
@@ -94,8 +97,8 @@ Get-ChildItem "$env:LOCALAPPDATA\Wander\logs" | Sort-Object LastWriteTime -Desce
 BACKLOG с цифрой; повторяющийся `WARN` / `ERROR` — разобрать до релиза.
 
 **Снимок версии — отдельным файлом.** `tools\release-metrics.ps1 -Version
-X.Y.Z` собирает окружение, вес и SHA256, старт и `PERF` из логов этого
-прогона, память и GC по сценариям харнесса в `docs/measurements/X.Y.Z.md`;
+X.Y.Z` собирает окружение, вес и SHA256, старт (`first frame`), `ui.stall`, `Folder listed`, `WARN` / `ERROR` из
+логов этого прогона, память и GC по сценариям харнесса в `docs/measurements/X.Y.Z.md`;
 «Verdict» там дописывается руками. Файл на версию не переписывается — это
 то, чем через год отвечают на «когда стало медленнее». Правила —
 [docs/measurements/README.md](measurements/README.md).
@@ -103,24 +106,30 @@ X.Y.Z` собирает окружение, вес и SHA256, старт и `PER
 ## Полная процедура
 
 0. Подготовка к релизу пройдена и дала зелёный свет (PRERELEASE.md).
-1. `.\tools\publish.ps1 -Run`, погонять. Прогон того же дня засчитывается
-   (коммит в логе отстаёт на один — норма).
-2. Прочитать замеры и снять снимок версии:
-   `.\tools\release-metrics.ps1 -Version <версия>`, заполнить «Verdict».
-   Регрессия останавливает релиз.
+1. Живой прогон релизной сборки (`.\tools\publish.ps1 -Run`, запускает
+   человек) сделан на подготовке (PRERELEASE, шаг 5), здесь не
+   повторяется. Прогон того же дня засчитывается (коммит в логе отстаёт на
+   один — норма).
+2. Снимок версии и «Verdict» сделаны на подготовке (PRERELEASE, шаг 6);
+   `release-metrics.ps1` не повторять — он перезапишет файл версии вместе
+   с «Verdict». Регрессия останавливает релиз.
 3. `.\tools\check.bat` — master зелёный.
 4. `.\tools\version.ps1 <версия>`.
-5. CHANGELOG: заменить `TODO`; секции Keep a Changelog (`Added`, `Changed`,
-   `Deprecated`, `Removed`, `Fixed`, `Security`), лишние удалить.
-   Обе — очень кратко (FINALIZING, п. 5, «CHANGELOG.md»).
+5. CHANGELOG: заменить `TODO` одним списком, без разделов `###` и без
+   вводной (решение человека 2026-11-10: «добавлено» или «исправлено» —
+   в самом пункте, если важно). `version.ps1` вставляет секцию версии
+   над первой `## [` — то есть над `## [Unreleased]`, а та остаётся ниже
+   со своими пунктами: пункты перенести на место `TODO`, раздел
+   `Unreleased` удалить целиком (следующая финализация заведёт новый —
+   FINALIZING, п. 5). Очень кратко (FINALIZING, п. 5, «CHANGELOG.md»).
    `CHANGELOG.en.md` — та же секция по-английски (решение человека
    2026-10-09): переводит Claude, за ним и остаётся (2026-10-26); слова —
-   как в интерфейсе и `GUIDE.en.md`. **Текст релиза на GitHub** — вводная
-   секции, строки над первым `###`, в обоих файлах: несколько строк, только
-   крупное (решение человека 2026-11-02: [в 0.6.0 было две страницы — до
-   ссылки на exe никто не долистает]). CI ставит английскую сверху,
-   русскую под ней, у каждой — ссылка на весь CHANGELOG.
-6. README: плашка `**Beta X.Y**`; возможности там не перечисляются — они на
+   как в интерфейсе и `GUIDE.en.md`. **Текст релиза на GitHub** —
+   английская секция как есть, срез один — дожим (решение человека
+   2026-11-10); внизу ссылки «Full changelog · Список изменений». Длина —
+   7–9 пунктов (2026-11-10), на экран (2026-11-02: [в 0.6.0 было две
+   страницы — до ссылки на exe никто не долистает]).
+6. README и README.ru: плашка `**Beta X.Y**`; возможности там не перечисляются — они на
    сайте. Бейдж и ссылка на релиз динамические — не трогать.
 7. `.\tools\check.bat` ещё раз — версия участвует в сборке.
 8. `.\tools\publish.ps1` — последний взгляд на то, что уйдёт: путь, размер,
@@ -130,44 +139,18 @@ X.Y.Z` собирает окружение, вес и SHA256, старт и `PER
    закоммитить» и останавливается; переспрашивать не нужно.
 10. Проследить за CI (*Actions*); на странице релиза — `Wander.exe` и
     `Wander.exe.sha256`.
-11. Сайт: тег `site-<дата>` на тот же коммит и пуш — лендинг предложит
+11. Сайт: тег `site-r<версия>` на тот же коммит и пуш — лендинг предложит
     новую версию. После публикации релиза — или одним пушем с тегом `v*`,
     но тогда кнопка ведёт в 404, пока `release.yml` не выложит exe
     (минуты): сайт собирается быстрее. **Только человек**, как и шаг 9.
-12. SmartScreen: exe — в Microsoft на проверку (решение человека
-    2026-10-01). Снимает предупреждение только с этого файла, по хэшу, —
-    на каждый релиз заново; ответ ждать не нужно. **Только человек** —
-    учётка Microsoft. Скачать `Wander.exe` со страницы релиза, хэш
-    скачанного (`Get-FileHash`) сверить с `sha256:…` в строке `Wander.exe`
-    — в строке `.sha256` хэш текстового файла. Форма
-    <https://www.microsoft.com/en-us/wdsi/filesubmission>: Software
-    developer → Microsoft Defender SmartScreen → exe как есть (после входа
-    предел 500 МБ) → «Incorrectly detected as malware/malicious»;
-    Detection name — `Microsoft Defender SmartScreen prevented an
-    unrecognized app from starting`; Definition version — пусто;
-    Additional information — шаблон ниже. Статус — «Submission history».
-
-    ```text
-    Wander is a portable file manager for Windows 10/11 focused on photos and media (WPF, .NET 10), free for non-commercial use. Single self-contained exe, no installer.
-
-    Version: <X.Y.Z> (pre-release), published <YYYY-MM-DD>
-    Release page: https://github.com/lekta/wander/releases/tag/v<X.Y.Z>
-    Direct download: https://github.com/lekta/wander/releases/download/v<X.Y.Z>/Wander.exe
-    SHA256: <HASH>
-
-    The exe is built by GitHub Actions from the public source code in this repository (.github/workflows/release.yml); the hash is published next to the file. The file is not code-signed yet.
-
-    On download and first run, Microsoft Defender SmartScreen shows "Windows protected your PC" / "unrecognized app, unknown publisher". Please review the file and clear the SmartScreen warning.
-    ```
 
 ## Что делает CI
 
 `.github/workflows/release.yml`, триггер — тег `v*`: `windows-latest`,
 .NET 10 SDK; `dotnet publish` Release / win-x64 / self-contained /
-single-file / сжатый; SHA256 рядом; текст релиза — вводная секции версии
-(над первым `###`) из `CHANGELOG.en.md`, под ней из `CHANGELOG.md`, и
-ссылки на оба файла (вводной нет — вся секция; английской нет — только
-русская; то и другое — с предупреждением в логе CI, выпуск не падает); `gh release create
+single-file / сжатый; SHA256 рядом; текст релиза — секция версии из
+`CHANGELOG.en.md` целиком и ссылки на оба файла (английской нет —
+русская с предупреждением в логе CI, выпуск не падает; нет русской — падает); `gh release create
 --notes-file --prerelease`. Сборка на раннере GitHub из публичного исходника — логи
 открыты, SHA256 подтверждает, что exe собран из этого кода (часть обещания
 README). `PublishTrimmed` для WPF не поддерживается — не включать.

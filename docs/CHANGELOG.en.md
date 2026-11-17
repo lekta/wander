@@ -1,13 +1,15 @@
 # Changelog
 
-🌐 **English** · [Русский](CHANGELOG.md)
+🌐 **English** [Русский](CHANGELOG.md)
 
 English edition of [CHANGELOG.md](CHANGELOG.md), from version 0.6 on;
-earlier versions are described in Russian only. A version's lead, the lines
-above its first heading, opens its release notes on GitHub.
+earlier versions are described in Russian only. A version's section, as is,
+is its release notes on GitHub.
 
-Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
-follow [SemVer](https://semver.org/). Dates in ISO format.
+Versions follow [SemVer](https://semver.org/), dates in ISO format. From
+0.6.2 on a version is one list, "added" or "fixed" inside the item when it
+matters; before that, [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+sections.
 
 ## [0.6.1-beta] — 2026-11-09
 

@@ -170,12 +170,11 @@
         The 3D preview's scene lighting. Here so these files really are every
         colour in the application, and in this one so a theme leaves it
         alone: these light the model, and a model lit for a dark window is a
-        model lit wrong. One directional light plus a dim ambient one - a
-        single light leaves everything facing away from it pure black, which
-        on an untextured solid reads as a hole in the model.
+        model lit wrong. Key, fill and rim plus a dim ambient one (PreviewPane).
     -->
 
-    <Color x:Key="ModelAmbientLight">#404040</Color>
-    <Color x:Key="ModelKeyLight">#C8C8C8</Color>
-    <Color x:Key="ModelFillLight">#505050</Color>
+    <Color x:Key="ModelAmbientLight">#333333</Color>
+    <Color x:Key="ModelKeyLight">#D9D9D9</Color>
+    <Color x:Key="ModelFillLight">#4D4D4D</Color>
+    <Color x:Key="ModelRimLight">#999999</Color>
 </ResourceDictionary>

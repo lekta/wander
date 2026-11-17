@@ -13,7 +13,15 @@ namespace Wander.Core.Workspace;
 /// <param name="IsRecycleBin">The Recycle Bin, where rows can be put back.</param>
 /// <param name="IsArchive">Inside an archive.</param>
 /// <param name="IsDevice">On a phone or a camera (PLAN Y4): read only, copied off by an import.</param>
-public sealed record PlaceFacts(bool IsReadOnly, bool IsRecycleBin, bool IsArchive, bool IsDevice = false) {
+/// <param name="IsArchiveFile">
+/// A panel row that is an archive itself: read-only as a place - nothing is
+/// pasted or made inside it - but the file on disk can be deleted (2026-11-11).
+/// </param>
+public sealed record PlaceFacts(bool IsReadOnly, bool IsRecycleBin, bool IsArchive, bool IsDevice = false, bool IsArchiveFile = false) {
+    /// <summary>Delete and Shift+Delete may run: a writable place, a device (said, not done), or an archive's own row.</summary>
+    public bool MayDelete => !IsReadOnly || IsDevice || IsArchiveFile;
+
+
     /// <summary>An ordinary folder on disk.</summary>
     public static readonly PlaceFacts Ordinary = new(false, false, false);
 }
@@ -79,6 +87,7 @@ public sealed record MenuContext {
             IsBackground = Subject.Kind == TargetKind.Background,
             IsPanelRow = Subject.Kind == TargetKind.PanelRow,
             IsReadOnlyLocation = Place.IsReadOnly,
+            IsArchiveFile = Place.IsArchiveFile,
             IsRecycleBin = Place.IsRecycleBin,
             IsArchive = Place.IsArchive,
             IsDevice = Place.IsDevice,

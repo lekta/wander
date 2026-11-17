@@ -348,13 +348,13 @@ public static partial class Strings {
     /// <summary>Скопировано внутри Wander: системный буфер обмена сейчас занят другим приложением</summary>
     public static string StatusClipboardNotShared => Get(nameof(StatusClipboardNotShared));
 
-    /// <summary>Выбрано: {0} — {1}</summary>
+    /// <summary>Выбрано: {0} - {1}</summary>
     public static string StatusSelection => Get(nameof(StatusSelection));
 
-    /// <summary> (папок: {0}, размер не считается)</summary>
+    /// <summary>, папок: {0} (размер не считается)</summary>
     public static string StatusSelectionFolders => Get(nameof(StatusSelectionFolders));
 
-    /// <summary>{0}: {1} px · Ctrl + нажать колёсико — вернуть {2} px</summary>
+    /// <summary>{0}: {1} px. Ctrl + нажать колёсико - вернуть {2} px</summary>
     public static string StatusViewSize => Get(nameof(StatusViewSize));
 
     /// <summary>{0}: {1} px (стандартный)</summary>

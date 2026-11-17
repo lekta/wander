@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Значки программ — до и после</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 100%; padding: 28px 32px 48px; background: #F3F3F3; color: #1A1A1A; font-family: 'Segoe UI', system-ui, sans-serif;">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 6px;">
+    <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Значки программ на папке — до и после</h1>
+    <span style="font-size: 13px; color: #555555;">{{note}}</span>
+  </div>
+  <p style="margin: 0 0 18px; font-size: 13px; line-height: 1.45; color: #555555; max-width: 960px;">«Сейчас» — значок программы на карточке с подложкой темы: светлый или тёмный квадрат вокруг значка. «После» — значок со своей прозрачностью прямо в папке, без карточки; тень — рычаг. Остальные карточки не меняются.</p>
+  <div style="display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start;">
+    <sc-for list="{{panels}}" as="pn" hint-placeholder-count="2">
+      <div style="flex: none; border: 1px solid {{pn.sep}}; background: {{pn.listBg}}; color: {{pn.fg}};">
+        <div style="padding: 10px 14px; font-size: 14px; font-weight: 600; border-bottom: 1px solid {{pn.sep}}; background: {{pn.headBg}};">{{pn.title}}</div>
+        <div style="display: flex; border-bottom: 1px solid {{pn.sep}}; background: {{pn.headBg}};">
+          <div style="width: 150px; flex: none; padding: 8px 14px; box-sizing: border-box; font-size: 12px; color: {{pn.dim}};">Папка</div>
+          <sc-for list="{{columns}}" as="col" hint-placeholder-count="6">
+            <div style="width: {{col.w}}px; flex: none; padding: 8px 4px; box-sizing: border-box; text-align: center; font-size: 12px;">
+              <div style="font-weight: 600;">{{col.view}}</div>
+              <div style="color: {{pn.dim}};">{{col.when}}</div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-for list="{{pn.rows}}" as="r" hint-placeholder-count="6">
+          <div style="display: flex; border-bottom: 1px solid {{pn.sep}};">
+            <div style="width: 150px; flex: none; padding: 12px 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 4px;">
+              <div style="font-size: 13px; font-weight: 600;">{{r.title}}</div>
+              <div style="font-size: 12px; line-height: 1.35; color: {{pn.dim}};">{{r.desc}}</div>
+            </div>
+            <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="6">
+              <div style="width: {{c.w}}px; flex: none; height: 240px; box-sizing: border-box; display: flex; justify-content: center; align-items: center; background: {{c.bg}};">
+                <div style="width: {{c.size}}px; height: {{c.size}}px;">
+                  <dc-import name="Folder" folder="{{c.folder}}" variant="Адаптивный" size="{{c.size}}" pick="Разные типы" walk="Прочитан весь — свежие" deep="Если своих нет" dark="{{pn.dark}}" appLook="{{c.appLook}}" models="{{models}}" hint-size="100%,100%"></dc-import>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"after":{"editor":"enum","options":["Прозрачный","Прозрачный с тенью"],"default":"Прозрачный с тенью","section":"После"},"models":{"editor":"enum","options":["Как программы","На подложке"],"default":"Как программы","section":"После"},"$preview":{"width":2380,"height":1700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const after = this.props.after ?? 'Прозрачный с тенью';
+    const models = this.props.models ?? 'Как программы';
+    // Each view twice, now and after: tiles 48, icons 96, gallery 216.
+    const views = [
+      { view: 'Плитка', size: 48, w: 96, gallery: false },
+      { view: 'Значки', size: 96, w: 136, gallery: false },
+      { view: 'Галерея', size: 216, w: 248, gallery: true }
+    ];
+    const columns = [];
+    views.forEach((v) => {
+      columns.push({ view: v.view, when: 'сейчас', w: v.w, size: v.size, gallery: v.gallery, appLook: 'Подложка' });
+      columns.push({ view: v.view, when: 'после', w: v.w, size: v.size, gallery: v.gallery, appLook: after });
+    });
+    const folders = [
+      ['Monitor', 'один exe, значок почти квадратный'],
+      ['Player', 'exe, руководство PDF и readme'],
+      ['Editor', 'exe без квадратного края и тексты'],
+      ['Encoder', 'exe-кольцо с прозрачной серединой и PDF'],
+      ['Messenger', 'один exe, значок-круг'],
+      ['модели', 'FBX, OBJ и текстура — для рычага «3D-модели»']
+    ];
+    const panel = (dark) => ({
+      title: dark ? 'Тёмная тема' : 'Светлая тема',
+      dark,
+      listBg: dark ? '#1E1E1E' : '#FAFAFA',
+      headBg: dark ? '#262626' : '#EEEEEE',
+      fg: dark ? '#E0E0E0' : '#1A1A1A',
+      dim: dark ? '#BDBDBD' : '#555555',
+      sep: dark ? '#3A3A3A' : '#DDDDDD',
+      rows: folders.map(([folder, desc]) => ({
+        title: folder,
+        desc,
+        cells: columns.map((c) => ({
+          folder,
+          size: c.size,
+          w: c.w,
+          appLook: c.appLook,
+          bg: c.gallery ? (dark ? '#1E1E1E' : '#6E6E6E') : (dark ? '#1E1E1E' : '#FAFAFA')
+        }))
+      }))
+    });
+    return {
+      columns,
+      models,
+      panels: [panel(false), panel(true)],
+      note: 'После: ' + after.toLowerCase() + '; 3D-модели — ' + models.toLowerCase()
+    };
+  }
+}
+</script>
+</body>
+</html>

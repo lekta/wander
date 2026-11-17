@@ -62,9 +62,66 @@ public sealed class ExtractionService {
     /// the same way.
     /// </returns>
     /// <exception cref="IOException">The target folder is in the Windows tree (<see cref="SystemPathGuard.MayWriteInto"/>).</exception>
-    public async Task<IReadOnlyList<BatchItemResult>> ExtractAsync(
+    public Task<IReadOnlyList<BatchItemResult>> ExtractAsync(
         IReadOnlyList<string> sources, string targetFolder,
         IConflictResolver resolver, CancellationToken ct) {
+        return RunAsync(sources, targetFolder, resolver, madeFolder: null, ct);
+    }
+
+    /// <summary>
+    /// "Извлечь сюда" of a drop (2026-11-11): <paramref name="sources"/> - the
+    /// top level of <paramref name="archive"/> - into a new folder named
+    /// after the archive inside <paramref name="parentFolder"/>, "(1)" when
+    /// that name is taken. The folder is new and empty, so nothing is asked;
+    /// undo is one step that sends the folder to the recycle bin. When
+    /// nothing came out, the empty folder is removed and Folder is null.
+    /// </summary>
+    /// <exception cref="IOException">The parent folder is in the Windows tree (<see cref="SystemPathGuard.MayWriteInto"/>).</exception>
+    public async Task<(string? Folder, IReadOnlyList<BatchItemResult> Results)> ExtractIntoNewFolderAsync(
+        string archive, IReadOnlyList<string> sources, string parentFolder, CancellationToken ct) {
+        if (!SystemPathGuard.MayWriteInto(parentFolder, out string guardReason)) {
+            _log.Warn($"Extract refused: {parentFolder} ({guardReason})");
+
+            throw new IOException(guardReason);
+        }
+
+        string folder = UniqueName(Path.Combine(parentFolder, FolderNameOf(archive)));
+        _fs.CreateDirectory(folder);
+        _log.Info($"Extract: new folder {folder} for {archive}");
+
+        var results = await RunAsync(sources, folder, new FixedConflictResolver(ConflictResolution.Rename), folder, ct)
+            .ConfigureAwait(false);
+        if (results.Any(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Renamed)) {
+            return (folder, results);
+        }
+
+        // Nothing came out: the folder made for it is empty and ours.
+        try {
+            _fs.DeleteDirectory(folder, recursive: false);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            _log.Warn($"Extract: could not remove the empty folder {folder}: {ex.Message}");
+        }
+
+        return (null, results);
+    }
+
+    /// <summary>
+    /// One entry, copied out with no questions asked, into scratch space
+    /// Wander owns - the temporary copy behind "open". The work is
+    /// <see cref="TempExtraction"/>'s, shared with the preview pane and the
+    /// conflict window; this is the door onto it for a caller that already
+    /// has the service in hand.
+    /// </summary>
+    /// <returns>The path of the copy.</returns>
+    public Task<string> ExtractToTempAsync(string source, string tempFolder, CancellationToken ct) {
+        return TempExtraction.CopyOutAsync(_ns, _fs, _log, source, tempFolder, ct);
+    }
+
+
+    /// <param name="madeFolder">The folder made for this extraction: undo recycles it whole instead of each item.</param>
+    private async Task<IReadOnlyList<BatchItemResult>> RunAsync(
+        IReadOnlyList<string> sources, string targetFolder,
+        IConflictResolver resolver, string? madeFolder, CancellationToken ct) {
 
         // Adding to the folder, not taking it away: a drive root or the
         // profile takes an extraction, the Windows tree does not.
@@ -87,13 +144,13 @@ public sealed class ExtractionService {
         if (!await ResolveConflicts(plans, results, queue, queued, restores, resolver, ct).ConfigureAwait(false)) {
             // Cancelled before anything moved. The recycled originals of the
             // Replaces answered before the Cancel are still undoable.
-            PushUndo(restores, Array.Empty<string>());
+            PushUndo(restores, Array.Empty<string>(), madeFolder);
 
             return results;
         }
 
         if (queue.Count == 0) {
-            PushUndo(restores, Array.Empty<string>());
+            PushUndo(restores, Array.Empty<string>(), madeFolder);
 
             return results;
         }
@@ -170,21 +227,9 @@ public sealed class ExtractionService {
             }
         }
 
-        PushUndo(restores, extracted);
+        PushUndo(restores, extracted, madeFolder);
 
         return results;
-    }
-
-    /// <summary>
-    /// One entry, copied out with no questions asked, into scratch space
-    /// Wander owns - the temporary copy behind "open". The work is
-    /// <see cref="TempExtraction"/>'s, shared with the preview pane and the
-    /// conflict window; this is the door onto it for a caller that already
-    /// has the service in hand.
-    /// </summary>
-    /// <returns>The path of the copy.</returns>
-    public Task<string> ExtractToTempAsync(string source, string tempFolder, CancellationToken ct) {
-        return TempExtraction.CopyOutAsync(_ns, _fs, _log, source, tempFolder, ct);
     }
 
 
@@ -377,11 +422,15 @@ public sealed class ExtractionService {
                 : null);
     }
 
-    private void PushUndo(IReadOnlyList<IUndoableAction> restores, IReadOnlyList<string> extracted) {
+    private void PushUndo(IReadOnlyList<IUndoableAction> restores, IReadOnlyList<string> extracted, string? madeFolder) {
         var steps = new List<IUndoableAction>(restores.Count + extracted.Count);
         steps.AddRange(restores);
-        foreach (string path in extracted) {
-            steps.Add(new ExtractAction(_bin, path));
+        if (madeFolder is not null && extracted.Count > 0) {
+            steps.Add(new ExtractAction(_bin, madeFolder));
+        } else if (madeFolder is null) {
+            foreach (string path in extracted) {
+                steps.Add(new ExtractAction(_bin, path));
+            }
         }
 
         if (steps.Count == 0) {
@@ -437,6 +486,16 @@ public sealed class ExtractionService {
 
     private static string NameOf(string path) {
         return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    }
+
+    /// <summary>"photos.zip" -> "photos", "src.tar.gz" -> "src"; a name that is all extension stays whole.</summary>
+    private static string FolderNameOf(string archive) {
+        string stem = Path.GetFileNameWithoutExtension(archive);
+        if (stem.EndsWith(".tar", StringComparison.OrdinalIgnoreCase)) {
+            stem = stem[..^4];
+        }
+
+        return stem.Length > 0 ? stem : NameOf(archive);
     }
 
     private static FileSystemEntry Unknown(string path) {

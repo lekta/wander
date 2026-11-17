@@ -1661,6 +1661,7 @@ public partial class MainWindow : Window {
     private async void ShowDropMenu(FrameworkElement host, DropPlan plan, Pane? pane = null) {
         var target = await Vm.DescribeDropAsync(plan.Paths, plan.Target, plan.Effect == DropEffect.Move);
         var bindings = new Dictionary<MenuCommandId, MenuBinding> {
+            [MenuCommandId.DropExtractHere] = new(new RelayCommand(() => Vm.ExtractDroppedArchives(plan.Paths, plan.Target))),
             [MenuCommandId.DropCopyHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Copy, pane))),
             [MenuCommandId.DropMoveHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Move, pane))),
             [MenuCommandId.DropLinkHere] = new(new RelayCommand(() => Vm.HandleDrop(plan.Paths, plan.Target, DropEffect.Link, pane))),

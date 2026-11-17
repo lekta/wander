@@ -36,7 +36,7 @@ public static partial class Strings {
     /// <summary>Значки</summary>
     public static string MenuViewLargeIcons => Get(nameof(MenuViewLargeIcons));
 
-    /// <summary>Эта папка · {0} - {0} почему такой вид</summary>
+    /// <summary>Эта папка ({0}) - {0} почему такой вид</summary>
     public static string MenuViewThisFolder => Get(nameof(MenuViewThisFolder));
 
     /// <summary>Закрепить этот вид за открытой папкой</summary>

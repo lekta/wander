@@ -247,6 +247,18 @@ public class ContextMenuBuilderTests {
         Assert.True(Enabled(file, MenuCommandId.CopyPath));
     }
 
+    /// <summary>An archive's own row in a panel: nothing goes inside it, but the file itself deletes.</summary>
+    [Fact]
+    public void ArchiveFileRow_DeletesButTakesNothingIn() {
+        var target = SelectionOf(File("pack.zip")) with { IsReadOnlyLocation = true, IsArchiveFile = true, CanPaste = true };
+
+        var file = Find(ContextMenuBuilder.Build(target, ContextMenuSettings.Default), MenuCommandId.FileSubmenu)!.Children;
+
+        Assert.True(Enabled(file, MenuCommandId.Delete));
+        Assert.False(Enabled(file, MenuCommandId.Paste));
+        Assert.False(Enabled(file, MenuCommandId.Rename));
+    }
+
 
     // --- Inside an archive ------------------------------------------------
 

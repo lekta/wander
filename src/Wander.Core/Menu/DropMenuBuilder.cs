@@ -30,6 +30,9 @@ public sealed record DropMenuTarget {
     /// <summary>The items come out of an archive: copying them out is all that can happen to them.</summary>
     public bool FromArchive { get; init; }
 
+    /// <summary>Every dropped item is an archive standing in an ordinary folder: "extract here" leads the menu.</summary>
+    public bool ArchivesOnly { get; init; }
+
     public IReadOnlyList<CustomAction> Actions { get; init; } = Array.Empty<CustomAction>();
 
     public IReadOnlySet<string> MissingTools { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -52,8 +55,13 @@ public static class DropMenuBuilder {
         var items = new List<MenuEntry> {
             new() { Id = MenuCommandId.DropCaption, Header = Caption(t), IsEnabled = false },
             MenuEntry.Divider,
-            Cmd(MenuCommandId.DropCopyHere, isDefault: t.FromArchive || !t.MoveByDefault),
         };
+        // Dropped archives are most likely meant to come out: the row goes
+        // first, and the bold one stays what a left-button drop would do.
+        if (t.ArchivesOnly && !t.FromArchive) {
+            items.Add(Cmd(MenuCommandId.DropExtractHere));
+        }
+        items.Add(Cmd(MenuCommandId.DropCopyHere, isDefault: t.FromArchive || !t.MoveByDefault));
         if (!t.FromArchive) {
             items.Add(Cmd(MenuCommandId.DropMoveHere, isDefault: t.MoveByDefault));
             items.Add(Cmd(MenuCommandId.DropLinkHere));

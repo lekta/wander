@@ -169,7 +169,7 @@
     <value>Анализ содержимого</value>
   </data>
   <data name="PreviewFolderHeadline" xml:space="preserve">
-    <value>{0:N0} файлов · {1:N0} папок · {2}</value>
+    <value>{0:N0} файлов, {1:N0} папок – {2}</value>
     <comment>{0} — файлов, {1} — папок, {2} — общий размер</comment>
   </data>
   <data name="PreviewFolderTruncated" xml:space="preserve">
@@ -186,15 +186,15 @@
     <value>Папки</value>
   </data>
   <data name="PreviewArchiveHeadline" xml:space="preserve">
-    <value>Архив: {0:N0} файлов · {1:N0} папок · {2}</value>
+    <value>Архив: {0:N0} файлов, {1:N0} папок – {2}</value>
     <comment>{0} — файлов в корне, {1} — папок, {2} — размер самого файла архива</comment>
   </data>
   <data name="PreviewArchiveFolderHeadline" xml:space="preserve">
-    <value>В архиве: {0:N0} файлов · {1:N0} папок</value>
+    <value>В архиве: {0:N0} файлов, {1:N0} папок</value>
     <comment>{0} — файлов в этой папке архива, {1} — папок в ней</comment>
   </data>
   <data name="PreviewZipHeadline" xml:space="preserve">
-    <value>{0:N0} файлов · {1:N0} папок · {2}, архив {3}</value>
+    <value>{0:N0} файлов, {1:N0} папок – {2} (архив {3})</value>
     <comment>Корень zip: {0} — файлов во всём архиве, {1} — папок, {2} — распакованный размер, {3} — размер файла архива</comment>
   </data>
   <data name="PreviewArchiveMore" xml:space="preserve">
@@ -709,8 +709,8 @@
     <value>нет доступа</value>
   </data>
   <data name="ConfirmDeleteAmount" xml:space="preserve">
-    <value>{0} · {1}</value>
-    <comment>Сколько и сколько весит: «2 файла, 1 папка · 42 MB»</comment>
+    <value>{0} – {1}</value>
+    <comment>Сколько и сколько весит: «2 файла, 1 папка – 42 MB»</comment>
   </data>
   <data name="ConfirmDeleteFilesAndFolders" xml:space="preserve">
     <value>{0}, {1}</value>
@@ -830,7 +830,7 @@
     <value>Папка</value>
   </data>
   <data name="TileFileLine" xml:space="preserve">
-    <value>{0} · {1}</value>
+    <value>{0} {1}</value>
     <comment>Вторая строка плитки у файла: {0} — расширение строчными, {1} — размер</comment>
   </data>
   <data name="PreviewRatingWrittenTo" xml:space="preserve">
@@ -1456,11 +1456,11 @@
     <value>Скопировано внутри Wander: системный буфер обмена сейчас занят другим приложением</value>
   </data>
   <data name="StatusSelection" xml:space="preserve">
-    <value>Выбрано: {0} · {1}</value>
+    <value>Выбрано: {0} – {1}</value>
     <comment>{0} — число объектов, {1} — суммарный размер</comment>
   </data>
   <data name="StatusSelectionFolders" xml:space="preserve">
-    <value> · папок: {0} (размер не считается)</value>
+    <value>, папок: {0} (размер не считается)</value>
     <comment>{0} — сколько папок в выделении</comment>
   </data>
   <data name="SettingsAutoRefresh" xml:space="preserve">
@@ -1503,7 +1503,7 @@
     <value>Ширина плитки, px</value>
   </data>
   <data name="StatusViewSize" xml:space="preserve">
-    <value>{0}: {1} px · Ctrl + нажать колёсико — вернуть {2} px</value>
+    <value>{0}: {1} px. Ctrl + нажать колёсико — вернуть {2} px</value>
     <comment>{0} — название вида, {1} — текущий размер, {2} — стандартный</comment>
   </data>
   <data name="StatusViewSizeDefault" xml:space="preserve">
@@ -1806,7 +1806,7 @@
     <value>{0:0.#} кГц</value>
   </data>
   <data name="PreviewModelDetail" xml:space="preserve">
-    <value>{0:N0} треугольников · {1:N0} вершин</value>
+    <value>{0:N0} треугольников, {1:N0} вершин</value>
   </data>
   <data name="PreviewExeVersion" xml:space="preserve">
     <value>Версия</value>
@@ -2234,7 +2234,7 @@
     <value>Фотография.jpg</value>
   </data>
   <data name="SettingsPreviewMeta" xml:space="preserve">
-    <value>14 КБ · Текстовый файл</value>
+    <value>txt 14 КБ</value>
   </data>
   <data name="SettingsShellReset" xml:space="preserve">
     <value>Сбросить настройки контекстного меню…</value>
@@ -2370,11 +2370,11 @@
     <comment>{0} - сколько операций идёт, {1} - общий процент</comment>
   </data>
   <data name="OperationsFinishedOk" xml:space="preserve">
-    <value>✓ {0}</value>
+    <value>✓{0}</value>
     <comment>{0} - сколько завершённых операций прошло без ошибок; строка состояния, когда ничего не идёт</comment>
   </data>
   <data name="OperationsFinishedProblems" xml:space="preserve">
-    <value>⚠ {0}</value>
+    <value>⚠{0}</value>
     <comment>{0} - сколько завершённых операций с ошибками</comment>
   </data>
   <data name="OperationOutcomeDone" xml:space="preserve">
@@ -2666,7 +2666,7 @@
     <value>Шаблон</value>
   </data>
   <data name="BatchRenameTemplateHint" xml:space="preserve">
-    <value>[N] имя · [C] счётчик · [D] дата изменения · [D:yyyy-MM-dd] дата в своём формате · [X] дата съёмки · [P] папка. Остальное — как написано</value>
+    <value>[N] имя, [C] счётчик, [D] дата изменения, [D:yyyy-MM-dd] дата в своём формате, [X] дата съёмки, [P] папка. Остальное — как написано</value>
   </data>
   <data name="BatchRenameCounter" xml:space="preserve">
     <value>Счётчик [C]</value>
@@ -3014,6 +3014,10 @@
   <data name="ActionsPickFolderTitle" xml:space="preserve">
     <value>Папка для результата</value>
   </data>
+  <data name="MenuCmdDropExtractHere" xml:space="preserve">
+    <value>Извлечь сюда</value>
+    <comment>Меню броска архивов правой кнопкой: каждый — в новую папку с его именем</comment>
+  </data>
   <data name="MenuCmdDropCopyHere" xml:space="preserve">
     <value>Копировать сюда</value>
     <comment>Меню броска правой кнопкой мыши; жирным — то, что сделал бы бросок левой</comment>
@@ -3039,6 +3043,18 @@
   <data name="HelperHistTip" xml:space="preserve">
     <value>Гистограмма по каналам; стрелки — пересвет и недосвет</value>
   </data>
+  <data name="ModelLightTip" xml:space="preserve">
+    <value>Свет: тени и блик — виден объём даже у тёмной модели. Выключено — цвет как есть, без теней</value>
+  </data>
+  <data name="ModelTextureTip" xml:space="preserve">
+    <value>Цвет и текстура из файла. Выключено — серая глина: виден объём любой модели</value>
+  </data>
+  <data name="ModelWireTip" xml:space="preserve">
+    <value>Сетка: рёбра треугольников поверх модели (до 150 000 рёбер)</value>
+  </data>
+  <data name="ModelBackTip" xml:space="preserve">
+    <value>Изнанка розовым: вывернутые грани и внутренняя сторона открытых мест</value>
+  </data>
   <data name="HelperShadowsTip" xml:space="preserve">
     <value>Поднять тени: что есть в тёмном</value>
   </data>
@@ -3057,7 +3073,7 @@
     <comment>{0} — балл резкости снимка</comment>
   </data>
   <data name="MenuViewThisFolder" xml:space="preserve">
-    <value>Эта папка · {0}</value>
+    <value>Эта папка ({0})</value>
     <comment>{0} — почему у папки такой вид: закреплён / авто: снимки / по умолчанию</comment>
   </data>
   <data name="MenuViewPinHint" xml:space="preserve">

@@ -110,4 +110,6 @@ public enum MenuCommandId {
     DropMoveHere,
     DropLinkHere,
     DropCancel,
+    /// <summary>Archives dropped: each comes out into a new folder named after it (2026-11-11). First row of the menu.</summary>
+    DropExtractHere,
 }

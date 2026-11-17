@@ -6,6 +6,7 @@ rem    tools\check.bat            build + format verify + strings + resources + 
 rem    tools\check.bat run        + smoke launch of the app
 rem    tools\check.bat format     apply dotnet format (writes files)
 rem    tools\check.bat qa         build + harness selfcheck + smoke-walk
+rem    tools\check.bat qa --rebuild   same, the sandbox regenerated first
 rem
 rem  Exit code 0 on success, non-zero on the first failed step.
 rem ===========================================================
@@ -44,7 +45,11 @@ if /i "%MODE%"=="qa" (
 
     echo.
     echo === harness smoke-walk ===
-    "%~dp0..\%HARNESS%" run "%~dp0..\tests\Wander.Harness\Scenarios\smoke-walk.json"
+    rem --rebuild from a Claude session: its %TEMP% is virtualised and the
+    rem old sandbox there is empty - docs/qa_harness.md.
+    set REBUILD=
+    if /i "%2"=="--rebuild" set REBUILD=--rebuild
+    "%~dp0..\%HARNESS%" run "%~dp0..\tests\Wander.Harness\Scenarios\smoke-walk.json" !REBUILD!
     rem The harness answers with its exit code: 0 passed, 2 a step failed,
     rem 70 the harness itself fell over. The path to report.md is the last
     rem line it prints, and it is the thing to read either way.

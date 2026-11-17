@@ -145,7 +145,7 @@
     <value>Analyzing contents</value>
   </data>
   <data name="PreviewFolderHeadline" xml:space="preserve">
-    <value>Files: {0:N0} · Folders: {1:N0} · {2}</value>
+    <value>Files: {0:N0}, folders: {1:N0} – {2}</value>
   </data>
   <data name="PreviewFolderTruncated" xml:space="preserve">
     <value>Nesting is too deep: not every level was scanned, so the numbers are incomplete</value>
@@ -160,13 +160,13 @@
     <value>Folders</value>
   </data>
   <data name="PreviewArchiveHeadline" xml:space="preserve">
-    <value>Archive · Files: {0:N0} · Folders: {1:N0} · {2}</value>
+    <value>Archive. Files: {0:N0}, folders: {1:N0} – {2}</value>
   </data>
   <data name="PreviewArchiveFolderHeadline" xml:space="preserve">
-    <value>In the archive · Files: {0:N0} · Folders: {1:N0}</value>
+    <value>In the archive. Files: {0:N0}, folders: {1:N0}</value>
   </data>
   <data name="PreviewZipHeadline" xml:space="preserve">
-    <value>Files: {0:N0} · Folders: {1:N0} · {2}, archive {3}</value>
+    <value>Files: {0:N0}, folders: {1:N0} – {2} (archive {3})</value>
   </data>
   <data name="PreviewArchiveMore" xml:space="preserve">
     <value>and {0:N0} more</value>
@@ -637,7 +637,7 @@
     <value>no access</value>
   </data>
   <data name="ConfirmDeleteAmount" xml:space="preserve">
-    <value>{0} · {1}</value>
+    <value>{0} – {1}</value>
   </data>
   <data name="ConfirmDeleteFilesAndFolders" xml:space="preserve">
     <value>{0}, {1}</value>
@@ -751,7 +751,7 @@
     <value>Folder</value>
   </data>
   <data name="TileFileLine" xml:space="preserve">
-    <value>{0} · {1}</value>
+    <value>{0} {1}</value>
   </data>
   <data name="PreviewRatingWrittenTo" xml:space="preserve">
     <value>Rating, written to {0}</value>
@@ -1315,10 +1315,10 @@
     <value>Copied within Wander: the system clipboard is in use by another app</value>
   </data>
   <data name="StatusSelection" xml:space="preserve">
-    <value>Selected: {0} · {1}</value>
+    <value>Selected: {0} – {1}</value>
   </data>
   <data name="StatusSelectionFolders" xml:space="preserve">
-    <value> · folders: {0} (size not counted)</value>
+    <value>, folders: {0} (size not counted)</value>
   </data>
   <data name="SettingsAutoRefresh" xml:space="preserve">
     <value>Show right away</value>
@@ -1360,7 +1360,7 @@
     <value>Tile width, px</value>
   </data>
   <data name="StatusViewSize" xml:space="preserve">
-    <value>{0}: {1} px · Ctrl + wheel click resets to {2} px</value>
+    <value>{0}: {1} px. Ctrl + wheel click resets to {2} px</value>
   </data>
   <data name="StatusViewSizeDefault" xml:space="preserve">
     <value>{0}: {1} px (default)</value>
@@ -1648,7 +1648,7 @@
     <value>{0:0.#} kHz</value>
   </data>
   <data name="PreviewModelDetail" xml:space="preserve">
-    <value>Triangles: {0:N0} · Vertices: {1:N0}</value>
+    <value>Triangles: {0:N0}, vertices: {1:N0}</value>
   </data>
   <data name="PreviewExeVersion" xml:space="preserve">
     <value>Version</value>
@@ -2062,7 +2062,7 @@
     <value>Photo.jpg</value>
   </data>
   <data name="SettingsPreviewMeta" xml:space="preserve">
-    <value>14 KB · Text file</value>
+    <value>txt 14 KB</value>
   </data>
   <data name="SettingsShellReset" xml:space="preserve">
     <value>Reset context menu settings…</value>
@@ -2188,10 +2188,10 @@
     <value>Operations: {0} — {1}%</value>
   </data>
   <data name="OperationsFinishedOk" xml:space="preserve">
-    <value>✓ {0}</value>
+    <value>✓{0}</value>
   </data>
   <data name="OperationsFinishedProblems" xml:space="preserve">
-    <value>⚠ {0}</value>
+    <value>⚠{0}</value>
   </data>
   <data name="OperationOutcomeDone" xml:space="preserve">
     <value>done {0}</value>
@@ -2446,7 +2446,7 @@
     <value>Template</value>
   </data>
   <data name="BatchRenameTemplateHint" xml:space="preserve">
-    <value>[N] name · [C] counter · [D] date modified · [D:yyyy-MM-dd] date in your own format · [X] date taken · [P] folder. Anything else stays as typed</value>
+    <value>[N] name, [C] counter, [D] date modified, [D:yyyy-MM-dd] date in your own format, [X] date taken, [P] folder. Anything else stays as typed</value>
   </data>
   <data name="BatchRenameCounter" xml:space="preserve">
     <value>Counter [C]</value>
@@ -2769,6 +2769,9 @@
   <data name="ActionsPickFolderTitle" xml:space="preserve">
     <value>Output folder</value>
   </data>
+  <data name="MenuCmdDropExtractHere" xml:space="preserve">
+    <value>Extract to new folder</value>
+  </data>
   <data name="MenuCmdDropCopyHere" xml:space="preserve">
     <value>Copy here</value>
   </data>
@@ -2793,6 +2796,18 @@
   <data name="HelperHistTip" xml:space="preserve">
     <value>Per-channel histogram; arrows mark clipped highlights and shadows</value>
   </data>
+  <data name="ModelLightTip" xml:space="preserve">
+    <value>Lighting: shading and shine show the shape, even on a dark model. Off: plain colours, no shading</value>
+  </data>
+  <data name="ModelTextureTip" xml:space="preserve">
+    <value>Colours and texture from the file. Off: grey clay that shows the shape of any model</value>
+  </data>
+  <data name="ModelWireTip" xml:space="preserve">
+    <value>Wireframe: triangle edges over the model (up to 150,000 edges)</value>
+  </data>
+  <data name="ModelBackTip" xml:space="preserve">
+    <value>Back faces in pink: faces turned inside out and the inner side of open parts</value>
+  </data>
   <data name="HelperShadowsTip" xml:space="preserve">
     <value>Lift shadows: see what's in the dark areas</value>
   </data>
@@ -2809,7 +2824,7 @@
     <value>Sharpness {0} of 100, from the crispest edges at the center of the frame; isolated dots (noise, snow, glints) count as a fraction of an edge. 70 and above is sharp, 50–70 soft, lower is a miss</value>
   </data>
   <data name="MenuViewThisFolder" xml:space="preserve">
-    <value>This folder · {0}</value>
+    <value>This folder ({0})</value>
   </data>
   <data name="MenuViewPinHint" xml:space="preserve">
     <value>Pin this view to the open folder</value>

@@ -9,23 +9,33 @@ using Wander.Core.Preview;
 namespace Wander.App.Preview;
 
 /// <summary>
-/// One drawable of a model: the triangles of a single material, and what
-/// they are painted with in front and behind.
+/// One drawable of a model: the triangles of a single material, and its
+/// colour or picture - lit, flat or swapped for clay by <see cref="ModelLook"/>.
 /// </summary>
-public sealed record ModelPart(MeshGeometry3D Geometry, Material Front, Material Back);
+public sealed record ModelPart(MeshGeometry3D Geometry, Brush Surface);
+
+
+/// <summary>
+/// The model's edges for the wireframe (<see cref="MeshWire"/>): the
+/// mesh's own positions, untransformed, and pairs of indices into them.
+/// </summary>
+public sealed record ModelWire(float[] Positions, int[] Edges);
 
 
 /// <summary>
 /// A model ready to be handed to a viewport: its parts, where the camera
 /// has to look, how far back it has to stand, and the line the pane prints
-/// under it.
+/// under it. <see cref="Wire"/> is null past <see cref="MeshWire.MaxEdges"/>;
+/// <see cref="Dark"/> - its colours are dark, the wireframe goes light.
 /// </summary>
 public sealed record ModelScene(
     IReadOnlyList<ModelPart> Parts,
     Point3D Center,
     double Radius,
     int Triangles,
-    int Vertices);
+    int Vertices,
+    ModelWire? Wire,
+    bool Dark);
 
 
 /// <summary>
@@ -49,8 +59,11 @@ internal static class ModelBuilder {
     /// <summary>What a model with no stated colour is drawn in.</summary>
     private const float ModelGrey = 0.76f;
 
-    /// <summary>The reverse of a face, a share of the front's brightness.</summary>
-    private const double BackFactor = 0.72;
+    /// <summary>A picture's colours are not looked at: taken as a middle grey.</summary>
+    private const double PictureLightness = 0.5;
+
+    /// <summary>Darker than this on average, the wireframe is drawn light.</summary>
+    private const double DarkBelow = 0.35;
 
     /// <summary>A picture's longest side past this is decoded down to it: a preview pane, not a texture budget.</summary>
     private const int MaxTextureSide = 2048;
@@ -84,6 +97,7 @@ internal static class ModelBuilder {
 
         var pictures = new Dictionary<MeshTexture, Brush?>();
         var parts = new List<ModelPart>(mesh.Parts.Count);
+        double lightness = 0;
         foreach (var part in mesh.Parts) {
             ct.ThrowIfCancellationRequested();
 
@@ -99,9 +113,8 @@ internal static class ModelBuilder {
             var picture = part.Texture is { } texture && texCoords is not null
                 ? pictures.TryGetValue(texture, out var known) ? known : pictures[texture] = Picture(texture)
                 : null;
-            parts.Add(picture is not null
-                ? new ModelPart(geometry, Diffuse(picture, 1.0), Diffuse(picture, BackFactor))
-                : new ModelPart(geometry, Diffuse(Paint(part.Color), 1.0), Diffuse(Paint(part.Color, back: true), 1.0)));
+            parts.Add(new ModelPart(geometry, picture ?? Paint(part.Color)));
+            lightness += picture is not null ? PictureLightness : Lightness(part.Color);
         }
 
         if (parts.Count == 0 || mesh.Bounds() is not { } box) {
@@ -113,7 +126,9 @@ internal static class ModelBuilder {
             new Point3D(box.CenterX, box.CenterY, box.CenterZ),
             Radius(box),
             mesh.TriangleCount,
-            mesh.VertexCount);
+            mesh.VertexCount,
+            MeshWire.Edges(mesh) is { } edges ? new ModelWire(mesh.Positions, edges) : null,
+            lightness / parts.Count < DarkBelow);
     }
 
 
@@ -145,39 +160,24 @@ internal static class ModelBuilder {
     /// with a picture is painted with that instead (<see cref="Picture"/>).
     /// </para>
     ///
-    /// <para>
-    /// <paramref name="back"/> darkens it for the reverse of a face.
-    /// Meshes with inconsistent winding are routine in exported OBJ and
-    /// STL, and without a back material those faces are simply missing;
-    /// with a darker one they read as the inside of a solid.
-    /// </para>
     /// </summary>
-    private static Brush Paint(MeshColor? colour, bool back = false) {
+    private static Brush Paint(MeshColor? colour) {
         var (r, g, b) = colour is { } c
             ? (c.R, c.G, c.B)
             : (ModelGrey, ModelGrey, ModelGrey);
 
-        double shade = back ? BackFactor : 1.0;
         var brush = new SolidColorBrush(Color.FromRgb(
-            (byte)Math.Round(r * 255 * shade),
-            (byte)Math.Round(g * 255 * shade),
-            (byte)Math.Round(b * 255 * shade)));
+            (byte)Math.Round(r * 255),
+            (byte)Math.Round(g * 255),
+            (byte)Math.Round(b * 255)));
         brush.Freeze();
 
         return brush;
     }
 
 
-    /// <summary>A diffuse material; <paramref name="shade"/> below one dims it - the back of a textured face.</summary>
-    private static Material Diffuse(Brush brush, double shade) {
-        var material = new DiffuseMaterial(brush);
-        if (shade < 1.0) {
-            byte level = (byte)Math.Round(255 * shade);
-            material.Color = Color.FromRgb(level, level, level);
-        }
-        material.Freeze();
-
-        return material;
+    private static double Lightness(MeshColor? colour) {
+        return colour is { } c ? (0.2126 * c.R) + (0.7152 * c.G) + (0.0722 * c.B) : ModelGrey;
     }
 
 

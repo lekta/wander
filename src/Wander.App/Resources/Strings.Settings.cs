@@ -399,7 +399,7 @@ public static partial class Strings {
     /// <summary>Фотография.jpg</summary>
     public static string SettingsPreviewName2 => Get(nameof(SettingsPreviewName2));
 
-    /// <summary>14 КБ · Текстовый файл</summary>
+    /// <summary>txt 14 КБ</summary>
     public static string SettingsPreviewMeta => Get(nameof(SettingsPreviewMeta));
 
     /// <summary>Сбросить настройки контекстного меню…</summary>

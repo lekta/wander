@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Файл грузится</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; width: 100%; height: 100%;">
+  <div style="position: absolute; {{plateCss}} background: {{plate}}; border-radius: {{radius}};"></div>
+  <div style="position: absolute; {{iconCss}}">
+    <dc-import name="Thumb" kind="type" tone="{{tone}}" fit="meet" hint-size="100%,100%"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kind":{"editor":"enum","options":["photo","tex","wave","text","doc","model","app"],"default":"photo"},"dark":{"editor":"boolean","default":false},"$preview":{"width":96,"height":96}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // A file whose picture is still coming (second fitting, 2026-11-09): a
+    // solid plate where the picture will stand, its type's icon on it at the
+    // size a file without a picture wears - nothing faded, so it does not
+    // read as a hidden file.
+    const kind = this.props.kind ?? 'photo';
+    const dark = !!(this.props.dark ?? false);
+    const TONE = { photo: 4, tex: 4, wave: 1, text: 2, doc: 2, model: 5, app: 6 };
+    const fills = kind === 'photo' || kind === 'tex';
+    return {
+      tone: TONE[kind] ?? 3,
+      plate: dark ? '#3A3F46' : '#E6E9EE',
+      radius: fills ? '3%' : '6%',
+      plateCss: fills ? 'left: 0; top: 0; width: 100%; height: 100%;' : 'left: 10%; top: 6%; width: 80%; height: 88%;',
+      iconCss: fills ? 'left: 15%; top: 5%; width: 70%; height: 90%;' : 'left: 5%; top: 5%; width: 90%; height: 90%;'
+    };
+  }
+}
+</script>
+</body>
+</html>

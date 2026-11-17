@@ -1,0 +1,97 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Apps.dc.html": {
+      "h": 1700,
+      "title": "Значки программ — до и после",
+      "w": 2380,
+      "x": -350,
+      "y": 1400
+    },
+    "Loading.dc.html": {
+      "h": 2700,
+      "title": "Пока грузится — варианты рядом",
+      "w": 2500,
+      "x": -350,
+      "y": 3220
+    },
+    "LoadingLive.dc.html": {
+      "expand": "fill",
+      "h": 820,
+      "is_interactive": true,
+      "title": "Пока грузится — в окне",
+      "w": 1280,
+      "x": 2230,
+      "y": 3220
+    },
+    "Pending.dc.html": {
+      "h": 96,
+      "title": "Файл грузится — компонент",
+      "w": 96,
+      "x": 2230,
+      "y": 4160
+    },
+    "Folder.dc.html": {
+      "h": 216,
+      "title": "Папка — компонент",
+      "w": 216,
+      "x": 1520,
+      "y": 940
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 1400,
+      "title": "Варианты рядом",
+      "w": 1440,
+      "x": -350,
+      "y": -120
+    },
+    "Thumb.dc.html": {
+      "h": 120,
+      "title": "Миниатюра — компонент",
+      "w": 120,
+      "x": 1816,
+      "y": 940
+    },
+    "Window.dc.html": {
+      "expand": "fill",
+      "h": 820,
+      "is_interactive": true,
+      "title": "В окне Wander",
+      "w": 1280,
+      "x": 1520,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-05T18:40:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "head": {
+      "kind": "title1",
+      "maxW": 2800,
+      "text": "Миниатюры папок — примерка",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Window.dc.html",
+    "Apps.dc.html",
+    "Loading.dc.html",
+    "LoadingLive.dc.html",
+    "Folder.dc.html",
+    "Thumb.dc.html",
+    "Pending.dc.html"
+  ],
+  "pages": [],
+  "title": "Миниатюры папок"
+}

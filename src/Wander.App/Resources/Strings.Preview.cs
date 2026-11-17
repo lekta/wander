@@ -93,7 +93,7 @@ public static partial class Strings {
     /// <summary>Анализ содержимого</summary>
     public static string PreviewCounting => Get(nameof(PreviewCounting));
 
-    /// <summary>{0:N0} файлов · {1:N0} папок · {2}</summary>
+    /// <summary>{0:N0} файлов, {1:N0} папок - {2}</summary>
     public static string PreviewFolderHeadline => Get(nameof(PreviewFolderHeadline));
 
     /// <summary>Слишком глубокая вложенность — вглубь пройдено не всё, числа неполные</summary>
@@ -111,13 +111,13 @@ public static partial class Strings {
     /// <summary>Папка пуста</summary>
     public static string PreviewFolderEmpty => Get(nameof(PreviewFolderEmpty));
 
-    /// <summary>Архив: {0:N0} файлов · {1:N0} папок · {2}</summary>
+    /// <summary>Архив: {0:N0} файлов, {1:N0} папок - {2}</summary>
     public static string PreviewArchiveHeadline => Get(nameof(PreviewArchiveHeadline));
 
-    /// <summary>В архиве: {0:N0} файлов · {1:N0} папок</summary>
+    /// <summary>В архиве: {0:N0} файлов, {1:N0} папок</summary>
     public static string PreviewArchiveFolderHeadline => Get(nameof(PreviewArchiveFolderHeadline));
 
-    /// <summary>{0:N0} файлов · {1:N0} папок · {2}, архив {3}</summary>
+    /// <summary>{0:N0} файлов, {1:N0} папок - {2} (архив {3})</summary>
     public static string PreviewZipHeadline => Get(nameof(PreviewZipHeadline));
 
     /// <summary>и ещё {0:N0}</summary>
@@ -280,7 +280,7 @@ public static partial class Strings {
     /// <summary>{0:0.#} кГц</summary>
     public static string PreviewAudioSampleRate => Get(nameof(PreviewAudioSampleRate));
 
-    /// <summary>{0:N0} треугольников · {1:N0} вершин</summary>
+    /// <summary>{0:N0} треугольников, {1:N0} вершин</summary>
     public static string PreviewModelDetail => Get(nameof(PreviewModelDetail));
 
     /// <summary>и ещё {0}</summary>
@@ -300,6 +300,18 @@ public static partial class Strings {
 
     /// <summary>Гистограмма по каналам; стрелки - пересвет и недосвет</summary>
     public static string HelperHistTip => Get(nameof(HelperHistTip));
+
+    /// <summary>Свет: тени и блик - виден объём даже у тёмной модели. Выключено - цвет как есть, без теней</summary>
+    public static string ModelLightTip => Get(nameof(ModelLightTip));
+
+    /// <summary>Цвет и текстура из файла. Выключено - серая глина: виден объём любой модели</summary>
+    public static string ModelTextureTip => Get(nameof(ModelTextureTip));
+
+    /// <summary>Сетка: рёбра треугольников поверх модели (до 150 000 рёбер)</summary>
+    public static string ModelWireTip => Get(nameof(ModelWireTip));
+
+    /// <summary>Изнанка розовым: вывернутые грани и внутренняя сторона открытых мест</summary>
+    public static string ModelBackTip => Get(nameof(ModelBackTip));
 
     /// <summary>Поднять тени: что есть в тёмном</summary>
     public static string HelperShadowsTip => Get(nameof(HelperShadowsTip));

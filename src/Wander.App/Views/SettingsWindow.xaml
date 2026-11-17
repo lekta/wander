@@ -1503,7 +1503,7 @@
 
     <DockPanel>
         <!-- Bottom button row.
-             Order: OK · Применить · Отмена — OK закоммитит и закроет, Применить
+             Order: OK, Применить, Отмена — OK закоммитит и закроет, Применить
              закоммитит без закрытия, Отмена откатит изменения и закроет.
              Baseline для отката снимается в Loaded в code-behind. -->
         <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Separator}" BorderThickness="0,1,0,0" Padding="12,8">

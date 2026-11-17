@@ -1258,7 +1258,8 @@ public sealed class MainViewModel : ObservableObject {
 
         if (_panelPlace is not { } known || !known.Row.SameAs(target)) {
             known = (target, new PlaceFacts(
-                IsReadOnly: IsShellPath(target.Folder), IsRecycleBin: false, IsArchive: false, IsDevice: DevicePath.Is(target.Folder)));
+                IsReadOnly: IsShellPath(target.Folder), IsRecycleBin: false, IsArchive: false, IsDevice: DevicePath.Is(target.Folder),
+                IsArchiveFile: Archives.Of(target.Folder) is { IsRoot: true }));
             _panelPlace = known;
         }
 
@@ -1443,7 +1444,7 @@ public sealed class MainViewModel : ObservableObject {
     public bool SelectionIsArchive { get; private set; }
 
     /// <summary>
-    /// "Выбрано: 3 · 1.2 MB" - what the target amounts to, for the status
+    /// "Выбрано: 3 - 1.2 MB" - what the target amounts to, for the status
     /// bar: the list's rows, or a panel row's folder while the keyboard is
     /// there. Empty when there is no target, so the field disappears rather
     /// than showing a zero.
@@ -2203,6 +2204,8 @@ public sealed class MainViewModel : ObservableObject {
             TargetFolder = target,
             MoveByDefault = moveByDefault,
             FromArchive = fromArchive,
+            ArchivesOnly = !fromArchive && TryGetShellNamespace() is not null
+                && paths.All(p => !DevicePath.IsInside(p) && Archives.Of(p) is { IsRoot: true }),
             Actions = Settings.Actions,
             MissingTools = MissingTools,
             Settings = MenuSettings,
@@ -5302,11 +5305,11 @@ public sealed class MainViewModel : ObservableObject {
         return !_fs.FileExists(picture.FullPath);
     }
 
-    /// <summary>Delete and Shift+Delete: the target's items, where the place allows it.</summary>
+    /// <summary>Delete and Shift+Delete: the target's items, where the place allows it (<see cref="PlaceFacts.MayDelete"/>).</summary>
     private bool CanDelete(object? parameter) {
         var (target, place) = ResolveTarget(parameter);
 
-        return TargetRules.Items(target).Count > 0 && (!place.IsReadOnly || place.IsDevice);
+        return TargetRules.Items(target).Count > 0 && place.MayDelete;
     }
 
     private async Task DeleteTargetAsync(object? parameter, bool permanent) {
@@ -6752,32 +6755,86 @@ public sealed class MainViewModel : ObservableObject {
         resolver ??= _dialogs.CreateConflictResolver(Settings.SkipIdenticalOnConflict);
         _log.Info($"Extract: {sources.Count} item(s) into {target}");
 
+        await RunExtractionAsync(
+            target,
+            ct => service.ExtractAsync(sources, target, resolver, ct),
+            results => results
+                .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
+                .Select(r => r.FinalDestination)
+                .ToArray());
+    }
+
+    /// <summary>
+    /// "Извлечь сюда" of a right-button drop (2026-11-11): each archive
+    /// into a new folder named after it inside <paramref name="target"/>,
+    /// one after another; a cancel stops the rest.
+    /// </summary>
+    public void ExtractDroppedArchives(IReadOnlyList<string> archives, string target) {
+        _ = ExtractDroppedArchivesAsync(archives, target);
+    }
+
+    private async Task ExtractDroppedArchivesAsync(IReadOnlyList<string> archives, string target) {
+        if (TryGetShellNamespace() is not { } ns) {
+            return;
+        }
+
+        var service = new ExtractionService(ns, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log, _claims);
+        foreach (string archive in archives) {
+            // Listed on the pool, as ExtractionSourcesAsync does: a big zip's catalogue takes seconds.
+            var sources = await LongWait.WatchAsync(
+                Task.Run(() => TopLevelOf(ns, archive)), _log, "extract: listing 1 archive(s)");
+            if (sources.Count == 0) {
+                Warn(string.Format(Strings.StatusArchiveEmptyOrLocked, Path.GetFileName(archive)));
+                continue;
+            }
+
+            _log.Info($"Extract: {archive} into a new folder in {target}");
+            string? made = null;
+            bool finished = await RunExtractionAsync(
+                target,
+                async ct => {
+                    var (folder, results) = await service.ExtractIntoNewFolderAsync(archive, sources, target, ct);
+                    made = folder;
+
+                    return results;
+                },
+                _ => made is null ? Array.Empty<string>() : new[] { made });
+            if (!finished) {
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The progress window, the errors and the report shared by both
+    /// routes above. <paramref name="arrivedOf"/> names the rows to select
+    /// in <paramref name="target"/>.
+    /// </summary>
+    /// <returns>False when the extraction was cancelled or failed as a whole.</returns>
+    private async Task<bool> RunExtractionAsync(
+        string target,
+        Func<CancellationToken, Task<IReadOnlyList<BatchItemResult>>> run,
+        Func<IReadOnlyList<BatchItemResult>, string[]> arrivedOf) {
         IReadOnlyList<BatchItemResult> results;
         var operation = new StrongBox<long>();
         try {
-            results = await RunWithProgressDialogAsync(
-                Strings.ProgressExtracting,
-                ct => service.ExtractAsync(sources, target, resolver, ct),
-                operation);
+            results = await RunWithProgressDialogAsync(Strings.ProgressExtracting, run, operation);
         } catch (OperationCanceledException) {
             Status = Strings.StatusCancelled;
             // What came out before the cancel is there, half of it asked
             // about while it was still empty.
             Workspace.Post(new FolderChanged(target));
-            return;
+            return false;
         } catch (Exception ex) {
             _log.Error($"Extract failed into {target}", ex);
             Fail(string.Format(Strings.StatusExtractFailed, ex.Message));
-            return;
+            return false;
         }
 
         // Select what arrived, but only when the folder it arrived in is the
         // one on screen: an extraction started from inside the archive lands
         // somewhere the user is not standing.
-        var arrived = results
-            .Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged)
-            .Select(r => r.FinalDestination)
-            .ToArray();
+        var arrived = arrivedOf(results);
         _session.SetArrivalHere(ArrivalIntent.Rows(target, arrived, takeFocus: arrived.Length > 0));
 
         Refresh();
@@ -6791,6 +6848,8 @@ public sealed class MainViewModel : ObservableObject {
             && results.Any(r => r.Error is ArchiveLockedException)) {
             Fail(Strings.StatusArchiveLocked);
         }
+
+        return true;
     }
 
     /// <summary>
@@ -7256,7 +7315,7 @@ public sealed class MainViewModel : ObservableObject {
             parts.Add(string.Format(Strings.OperationsFinishedProblems, bad));
         }
 
-        return string.Join(" · ", parts);
+        return string.Join(" ", parts);
     }
 
     /// <summary>

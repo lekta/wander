@@ -51,6 +51,50 @@ public class ExtractionServiceTests {
     }
 
     [Fact]
+    public async Task IntoNewFolder_MakesAFolderNamedAfterTheArchive_AndUndoRecyclesItWhole() {
+        var (service, _, fs, bin, undo) = Setup();
+
+        var (folder, results) = await service.ExtractIntoNewFolderAsync(
+            Archive, new[] { InnerReadme, InnerDocs }, Target, CancellationToken.None);
+
+        Assert.Equal(@"C:\out\nested", folder);
+        Assert.All(results, r => Assert.Equal(BatchItemStatus.Ok, r.Status));
+        Assert.True(fs.FileExists(@"C:\out\nested\readme.txt"));
+        Assert.True(fs.FileExists(@"C:\out\nested\docs\manual.txt"));
+        Assert.Equal(1, undo.Depth);
+
+        undo.Undo();
+
+        Assert.Equal(new[] { @"Recycle:C:\out\nested" }, bin.CallLog);
+    }
+
+    [Fact]
+    public async Task IntoNewFolder_ATakenName_GetsANumber() {
+        var (service, _, fs, _, _) = Setup();
+        fs.Files[@"C:\out\nested"] = Array.Empty<byte>();
+
+        var (folder, _) = await service.ExtractIntoNewFolderAsync(
+            Archive, new[] { InnerReadme }, Target, CancellationToken.None);
+
+        Assert.Equal(@"C:\out\nested (1)", folder);
+        Assert.True(fs.FileExists(@"C:\out\nested (1)\readme.txt"));
+    }
+
+    [Fact]
+    public async Task IntoNewFolder_NothingCameOut_RemovesTheEmptyFolder_AndPushesNoUndo() {
+        var (service, ns, fs, _, undo) = Setup();
+        ns.CopyOutFailure = new IOException("locked");
+
+        var (folder, results) = await service.ExtractIntoNewFolderAsync(
+            Archive, new[] { InnerReadme }, Target, CancellationToken.None);
+
+        Assert.Null(folder);
+        Assert.Equal(BatchItemStatus.Failed, Assert.Single(results).Status);
+        Assert.Contains(@"DeleteDirectory:C:\out\nested:False", fs.CallLog);
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
     public async Task Extract_ClaimsTheEntriesAndWhereTheyLand_WhileItRuns() {
         var fs = new FakeFileSystem();
         fs.Directories.Add(Target);

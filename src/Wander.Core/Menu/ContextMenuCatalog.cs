@@ -76,6 +76,7 @@ public static class ContextMenuCatalog {
         [MenuCommandId.Eject] = "MenuCmdEject",
         [MenuCommandId.Properties] = "MenuCmdProperties",
 
+        [MenuCommandId.DropExtractHere] = "MenuCmdDropExtractHere",
         [MenuCommandId.DropCopyHere] = "MenuCmdDropCopyHere",
         [MenuCommandId.DropMoveHere] = "MenuCmdDropMoveHere",
         [MenuCommandId.DropLinkHere] = "MenuCmdDropLinkHere",

@@ -1,6 +1,6 @@
 # Security Policy
 
-🌐 **English** · [Русский](#политика-безопасности)
+🌐 **English** [Русский](#политика-безопасности)
 
 Wander is a local desktop application: there is no server side, no accounts
 and no data sent out; the attack surface is the application itself and what

@@ -289,6 +289,11 @@ public sealed class PreviewController : ObservableObject {
     private Point3D _modelCenter;
     private double _modelRadius = 1;
     private string _modelDetail = "";
+    private ModelWire? _modelWire;
+    private bool _modelLit = true;
+    private bool _modelTextured = true;
+    private bool _modelWireOn;
+    private bool _modelBackOn;
     private ImageSource? _audioCover;
     private ImageSource? _executableIcon;
     private string _executableTitle = "";
@@ -988,6 +993,45 @@ public sealed class PreviewController : ObservableObject {
         private set => SetField(ref _modelDetail, value);
     }
 
+    /// <summary>The model's edges for the wireframe; null past <see cref="MeshWire.MaxEdges"/>, and the switch is off.</summary>
+    public ModelWire? ModelWire {
+        get => _modelWire;
+        private set {
+            SetField(ref _modelWire, value);
+            Raise(nameof(HasModelWire));
+        }
+    }
+
+    public bool HasModelWire => _modelWire is not null;
+
+    /// <summary>The model's colours are dark: the wireframe over them goes light.</summary>
+    public bool ModelDark { get; private set; }
+
+    /// <summary>
+    /// The switches under the model: shading and shine, the file's colours
+    /// (off - clay), the wireframe, back faces in pink. For the window's
+    /// session, as the review helpers.
+    /// </summary>
+    public bool ModelLit {
+        get => _modelLit;
+        set => SetField(ref _modelLit, value);
+    }
+
+    public bool ModelTextured {
+        get => _modelTextured;
+        set => SetField(ref _modelTextured, value);
+    }
+
+    public bool ModelWireOn {
+        get => _modelWireOn;
+        set => SetField(ref _modelWireOn, value);
+    }
+
+    public bool ModelBackOn {
+        get => _modelBackOn;
+        set => SetField(ref _modelBackOn, value);
+    }
+
     /// <summary>
     /// File for the rich-text viewer (<c>.rtf</c>). A path rather than a
     /// document: WPF parses RTF itself, but only into a
@@ -1348,7 +1392,7 @@ public sealed class PreviewController : ObservableObject {
         ? ""
         : _volume.Label.Length > 0 ? _volume.Label : _volume.Root;
 
-    /// <summary>File system and kind: "NTFS · Локальный диск".</summary>
+    /// <summary>File system and kind: "NTFS   Локальный диск".</summary>
     public string VolumeDetail {
         get {
             if (_volume is null) {
@@ -3059,6 +3103,8 @@ public sealed class PreviewController : ObservableObject {
         ModelCenter = model.Center;
         ModelRadius = model.Radius;
         ModelDetail = string.Format(Strings.PreviewModelDetail, model.Triangles, model.Vertices);
+        ModelDark = model.Dark;
+        ModelWire = model.Wire;
         // Before the parts: their arrival is what places the model.
         _modelPath = path;
         ModelView = ServiceLocator.TryGet<IModelViews>()?.Get(path) ?? ModelView.Default;
@@ -3826,6 +3872,7 @@ public sealed class PreviewController : ObservableObject {
         _signatureKey = null;
         CanCheckSignature = false;
         ModelParts = Array.Empty<ModelPart>();
+        ModelWire = null;
         _modelPath = null;
         Font = null;
         ModelDetail = "";

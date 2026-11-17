@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Значок папки</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; flex: none; width: {{px}}px; height: {{px}}px;">
+  <sc-if value="{{showStar}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; left: 10%; top: 10%; width: 80%; height: 80%;">
+      <dc-import name="Thumb" kind="star" tone="{{zero}}" fit="meet" hint-size="100%,100%"></dc-import>
+    </div>
+  </sc-if>
+  <sc-if value="{{showInside}}" hint-placeholder-val="{{true}}">
+    <svg viewBox="0 0 100 100" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%;" aria-hidden="true">
+      <path d="M8 20 Q8 15 13 15 H36 Q39 15 41 17.5 L44 21 H87 Q92 21 92 26 V78 Q92 83 87 83 H13 Q8 83 8 78 Z" fill="#F0B23A"></path>
+    </svg>
+    <sc-for list="{{slots}}" as="s" hint-placeholder-count="1">
+      <div style="position: absolute; overflow: hidden; box-sizing: border-box; {{s.css}}">
+        <dc-import name="Thumb" kind="{{s.kind}}" tone="{{s.tone}}" fit="{{s.fit}}" hint-size="100%,100%"></dc-import>
+      </div>
+    </sc-for>
+    <svg viewBox="0 0 100 100" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%;" aria-hidden="true">
+      <defs>
+        <linearGradient id="{{gid}}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#FFDB73"></stop>
+          <stop offset="1" stop-color="#FFC844"></stop>
+        </linearGradient>
+      </defs>
+      <path d="{{flap}}" fill="url(#{{gid}})"></path>
+      <path d="{{edge}}" stroke="#FFEBAE" stroke-width="0.9" fill="none"></path>
+    </svg>
+  </sc-if>
+  <sc-if value="{{showFace}}" hint-placeholder-val="{{false}}">
+    <svg viewBox="0 0 100 100" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%;" aria-hidden="true">
+      <path d="M8 27 V18 Q8 13 13 13 H33 Q36 13 38 15.5 L41 19 H87 Q92 19 92 24 V27 Z" fill="#F0B23A"></path>
+    </svg>
+    <div style="position: absolute; left: 7%; top: 21%; width: 86%; height: 66%; background: #FFCD52; border-radius: {{faceR}}px;"></div>
+    <sc-for list="{{slots}}" as="s" hint-placeholder-count="4">
+      <div style="position: absolute; overflow: hidden; box-sizing: border-box; {{s.css}}">
+        <dc-import name="Thumb" kind="{{s.kind}}" tone="{{s.tone}}" fit="{{s.fit}}" hint-size="100%,100%"></dc-import>
+        <sc-if value="{{s.sub}}" hint-placeholder-val="{{false}}">
+          <svg viewBox="0 0 24 24" style="position: absolute; right: 5%; bottom: 5%; width: 36%; height: 36%;" aria-hidden="true">
+            <path d="M2 6 Q2 4 4 4 H9 L11 6 H20 Q22 6 22 8 V18 Q22 20 20 20 H4 Q2 20 2 18 Z" fill="#F0B23A" stroke="#FFFFFF" stroke-width="1.6"></path>
+          </svg>
+        </sc-if>
+      </div>
+    </sc-for>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"folder":{"editor":"enum","options":["raw","textures","звуки","модели","разное","docs","Viewer","_misc","пустая","Проект","Monitor","Player","Editor","Encoder","Messenger"],"default":"разное"},"appLook":{"editor":"enum","options":["Подложка","Прозрачный","Прозрачный с тенью"],"default":"Подложка"},"models":{"editor":"enum","options":["На подложке","Как программы"],"default":"На подложке"},"pending":{"editor":"enum","options":["Нет","Силуэт"],"default":"Нет"},"variant":{"editor":"enum","options":["Сейчас (оболочка)","Лист","Каскад","2×2","Адаптивный"],"default":"Каскад"},"size":{"editor":"int","min":32,"max":256,"default":216},"pick":{"editor":"enum","options":["Разные типы","Картинки вперёд","Как Проводник"],"default":"Разные типы"},"walk":{"editor":"enum","options":["Прочитан весь — свежие","Не успел — первые по имени"],"default":"Прочитан весь — свежие"},"deep":{"editor":"enum","options":["Не смотреть","Если своих нет"],"default":"Если своих нет"},"dark":{"editor":"boolean","default":false},"loaded":{"editor":"boolean","default":true},"$preview":{"width":216,"height":216}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Files in name order; age 1 is the newest. k: photo / tex / doc / text /
+    // wave / model / app are weighty; side, junk, aux (a helper exe), zip are not.
+    const DATA = {
+      'raw': { files: [
+        { k: 'photo', t: 0, age: 30, shell: 'pic' }, { k: 'side', age: 12, shell: 'blank' },
+        { k: 'photo', t: 1, age: 29, shell: 'pic' }, { k: 'photo', t: 2, age: 28, shell: 'pic' },
+        { k: 'side', age: 1, shell: 'blank' }, { k: 'photo', t: 3, age: 27, shell: 'pic' },
+        { k: 'photo', t: 4, age: 26, shell: 'pic' }, { k: 'photo', t: 5, age: 25, shell: 'pic' }] },
+      'textures': { files: [
+        { k: 'tex', t: 3, age: 6, shell: 'pic' }, { k: 'tex', t: 2, age: 5, shell: 'pic' },
+        { k: 'tex', t: 1, age: 4, shell: 'pic' }, { k: 'tex', t: 0, age: 1, shell: 'pic' },
+        { k: 'tex', t: 2, age: 3, shell: 'pic' }, { k: 'tex', t: 1, age: 2, shell: 'pic' }] },
+      'звуки': { files: [
+        { k: 'wave', t: 0, age: 3, shell: 'type', ty: 1 }, { k: 'wave', t: 1, age: 2, shell: 'type', ty: 1 },
+        { k: 'wave', t: 2, age: 1, shell: 'type', ty: 1 }] },
+      'модели': { files: [
+        { k: 'model', t: 0, age: 4, shell: 'blank' }, { k: 'tex', t: 0, age: 1, shell: 'type', ty: 3 },
+        { k: 'model', t: 1, age: 5, shell: 'blank' }, { k: 'model', t: 2, age: 6, shell: 'blank' }] },
+      'разное': { files: [
+        { k: 'wave', t: 1, age: 6, shell: 'type', ty: 1 }, { k: 'photo', t: 4, age: 9, shell: 'pic' },
+        { k: 'model', t: 2, age: 7, shell: 'blank' }, { k: 'junk', age: 3, shell: 'type', ty: 3 },
+        { k: 'text', t: 0, age: 5, shell: 'type', ty: 2 }, { k: 'zip', age: 1, shell: 'type', ty: 0 }] },
+      'docs': { files: [
+        { k: 'text', t: 0, age: 4, shell: 'type', ty: 2 }, { k: 'text', t: 1, age: 2, shell: 'type', ty: 2 },
+        { k: 'text', t: 2, age: 1, shell: 'type', ty: 2 }, { k: 'doc', t: 0, age: 6, shell: 'pic' }] },
+      'Viewer': { files: [
+        { k: 'aux', age: 6, shell: 'type', ty: 3 }, { k: 'junk', age: 2, shell: 'type', ty: 2 },
+        { k: 'junk', age: 9, shell: 'type', ty: 3 }, { k: 'text', t: 1, age: 7, shell: 'type', ty: 2 },
+        { k: 'junk', age: 1, shell: 'type', ty: 3 }, { k: 'aux', age: 8, shell: 'type', ty: 3 },
+        { k: 'aux', age: 3, shell: 'type', ty: 3 }, { k: 'app', t: 0, age: 6, shell: 'type', ty: 3 }] },
+      '_misc': { files: [{ k: 'zip', age: 2, shell: 'type', ty: 0 }],
+        subs: [{ k: 'model', t: 0 }, { k: 'doc', t: 0 }, { k: 'photo', t: 2 }, { k: 'tex', t: 0 }] },
+      'пустая': { files: [] },
+      'Проект': { custom: true, files: [{ k: 'photo', t: 1, age: 1, shell: 'pic' }] },
+      // Folders of programs, as in the owner's C:\Programs (2026-11-06):
+      // the program alone, or in front of its readme and manual.
+      'Monitor': { files: [
+        { k: 'aux', age: 4, shell: 'type', ty: 3 }, { k: 'junk', age: 2, shell: 'type', ty: 3 },
+        { k: 'app', t: 0, age: 5, shell: 'type', ty: 3 }] },
+      'Player': { files: [
+        { k: 'junk', age: 1, shell: 'type', ty: 3 }, { k: 'app', t: 1, age: 6, shell: 'type', ty: 3 },
+        { k: 'doc', t: 0, age: 7, shell: 'pic' }, { k: 'text', t: 1, age: 8, shell: 'type', ty: 2 }] },
+      'Editor': { files: [
+        { k: 'app', t: 5, age: 4, shell: 'type', ty: 3 }, { k: 'junk', age: 1, shell: 'type', ty: 3 },
+        { k: 'text', t: 0, age: 3, shell: 'type', ty: 2 }, { k: 'text', t: 2, age: 9, shell: 'type', ty: 2 }] },
+      'Encoder': { files: [
+        { k: 'aux', age: 2, shell: 'type', ty: 3 }, { k: 'app', t: 4, age: 5, shell: 'type', ty: 3 },
+        { k: 'doc', t: 0, age: 6, shell: 'pic' }] },
+      'Messenger': { files: [
+        { k: 'aux', age: 2, shell: 'type', ty: 3 }, { k: 'junk', age: 1, shell: 'type', ty: 3 },
+        { k: 'app', t: 3, age: 3, shell: 'type', ty: 3 }] }
+    };
+    const CAT = { photo: 'pic', tex: 'pic', doc: 'doc', text: 'doc', wave: 'sound', model: 'model', app: 'app' };
+    const PRI = { app: 0, photo: 1, tex: 1, model: 1, doc: 1, wave: 2, text: 2 };
+    const PAGE = { wave: 1, text: 1, doc: 1, type: 1, blank: 1 };
+    const VARIANTS = { 'Сейчас (оболочка)': 'shell', 'Лист': 'sheet', 'Каскад': 'cascade', '2×2': 'grid', 'Адаптивный': 'adaptive' };
+    const PICKS = { 'Разные типы': 'diverse', 'Картинки вперёд': 'pics', 'Как Проводник': 'explorer' };
+
+    const px = Math.max(16, Number(this.props.size ?? 216) || 216);
+    const dark = !!(this.props.dark ?? false);
+    const loaded = this.props.loaded ?? true;
+    const d = DATA[this.props.folder ?? 'разное'] ?? DATA['разное'];
+    let variant = VARIANTS[this.props.variant ?? 'Каскад'] ?? 'cascade';
+    if (variant === 'adaptive') {
+      variant = px < 150 ? 'cascade' : 'grid';
+    }
+    const rule = PICKS[this.props.pick ?? ''] ?? 'diverse';
+    const walkFull = (this.props.walk ?? 'Прочитан весь — свежие') === 'Прочитан весь — свежие';
+    const deep = (this.props.deep ?? 'Если своих нет') === 'Если своих нет';
+    if (!this._gid) {
+      this._gid = 'f' + Math.random().toString(36).slice(2, 9);
+    }
+    const want = variant === 'grid' ? 4 : variant === 'cascade' ? (px < 64 ? 2 : 3) : 1;
+
+    const asShell = (f) => f.shell === 'pic' ? { k: f.k, t: f.t ?? 0 } : f.shell === 'type' ? { k: 'type', t: f.ty ?? 3 } : { k: 'blank', t: 3 };
+    const files = d.files.map((f, i) => ({ ...f, i }));
+    const rank = (a, b) => walkFull ? a.age - b.age : a.i - b.i;
+    let picks;
+    if (variant === 'shell') {
+      const newest = files.slice().sort((a, b) => a.age - b.age)[0];
+      picks = newest ? [asShell(newest)] : [];
+    } else if (rule === 'explorer') {
+      picks = files.slice().sort((a, b) => a.age - b.age).slice(0, want).map((f) => CAT[f.k] ? { k: f.k, t: f.t ?? 0 } : asShell(f));
+    } else {
+      const weighty = files.filter((f) => CAT[f.k]).sort(rank);
+      let chosen;
+      if (rule === 'pics') {
+        chosen = weighty.slice().sort((a, b) => (PRI[a.k] - PRI[b.k]) || rank(a, b)).slice(0, want);
+      } else {
+        const cats = weighty.some((f) => f.k === 'app') ? ['app'] : [];
+        weighty.forEach((f) => {
+          if (!cats.includes(CAT[f.k])) {
+            cats.push(CAT[f.k]);
+          }
+        });
+        chosen = cats.map((c) => weighty.find((f) => CAT[f.k] === c));
+        weighty.forEach((f) => {
+          if (chosen.length < want && !chosen.includes(f)) {
+            chosen.push(f);
+          }
+        });
+        chosen = chosen.slice(0, want);
+      }
+      picks = chosen.map((f) => ({ k: f.k, t: f.t ?? 0 }));
+      if (picks.length === 0 && deep && d.subs) {
+        picks = d.subs.slice(0, want).map((s) => ({ k: s.k, t: s.t ?? 0, sub: true }));
+      }
+    }
+
+    const backdrop = dark ? '#2E3238' : '#F4F6F8';
+    const r = (v) => Math.max(1, Math.round(px * v));
+    const box = (left, top, w, h) => 'left: ' + left + '%; top: ' + top + '%; width: ' + w + '%; height: ' + h + '%;';
+    const solid = (k) => k === 'model' || k === 'app';
+    // A program's icon - and a model, if the lever says so - straight on the
+    // folder, without a card or a backdrop: its own transparency kept. With
+    // the shadow, one that follows its outline, so it does not melt into the yellow.
+    const appLook = this.props.appLook ?? 'Подложка';
+    const shadowed = appLook === 'Прозрачный с тенью';
+    const bare = (k) => appLook !== 'Подложка' && (k === 'app' || (k === 'model' && (this.props.models ?? 'На подложке') === 'Как программы'));
+    const drop = ' overflow: visible;' + (shadowed ? ' filter: drop-shadow(0 ' + r(0.012) + 'px ' + r(0.025) + 'px rgba(0,0,0,0.35));' : '');
+    // The icon is square: fitted whole, it takes the biggest square in the
+    // centre of its place, so it never hangs out of the folder.
+    const square = (left, top, w, h) => {
+      const side = Math.min(w, h);
+      return box((left + (w - side) / 2).toFixed(2), (top + (h - side) / 2).toFixed(2), side.toFixed(2), side.toFixed(2));
+    };
+    let slots = [];
+    let showInside = false, showFace = false, T = 32;
+    const custom = !!d.custom;
+    // Still loading (second fitting, 2026-11-09): the folder as it will
+    // stand, after its walk - as many cards as files it will show, each a
+    // plain solid card with the file's type on it; nothing faded, so it does
+    // not read as hidden. A folder with nothing to show has no in-between:
+    // its empty picture is the final one.
+    const sil = (this.props.pending ?? 'Нет') === 'Силуэт' && !custom && picks.length > 0;
+    const TYPE = { photo: 4, tex: 4, wave: 1, text: 2, doc: 2, model: 5, app: 6 };
+
+    if (!custom && (picks.length === 0 || variant === 'sheet' || variant === 'shell' || variant === 'cascade')) {
+      showInside = true;
+      if (picks.length === 0) {
+        T = 32;
+      } else if (variant === 'cascade') {
+        // Inside the folder: the cards start below its back edge (21) and
+        // step right more than down, so each one shows a strip.
+        T = 60;
+        const n = picks.length;
+        const spots = n === 1 ? [[24, 25]] : n === 2 ? [[17, 23], [33, 28]] : [[11, 22], [23, 26], [35, 30]];
+        const edge = Math.max(1, Math.round(px / 96));
+        slots = picks.slice().reverse().map((p, si) => {
+          const [l, t] = spots[si];
+          if (sil) {
+            return { kind: px >= 64 ? 'type' : 'none', tone: TYPE[p.k] ?? 3, sub: false, fit: 'meet',
+              css: box(l, t, 52, 46) + ' background: #ECEEF1; border: ' + edge + 'px solid #FFFFFF; border-radius: ' + r(0.02) + 'px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.22), 0 1px ' + r(0.02) + 'px rgba(0,0,0,0.25);' };
+          }
+          if (bare(p.k)) {
+            return { kind: p.k, tone: p.t, sub: false, fit: 'meet', css: square(l, t, 52, 46) + drop };
+          }
+          const bg = solid(p.k) ? backdrop : '#FFFFFF';
+          return { kind: p.k, tone: p.t, sub: false, fit: solid(p.k) ? 'meet' : 'slice',
+            css: box(l, t, 52, 46) + ' background: ' + bg + '; border: ' + edge + 'px solid #FFFFFF; border-radius: ' + r(0.02) + 'px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.22), 0 1px ' + r(0.02) + 'px rgba(0,0,0,0.25);' };
+        });
+      } else {
+        T = 46;
+        const p = picks[0];
+        if (PAGE[p.k]) {
+          slots = [{ kind: p.k, tone: p.t, sub: false, fit: 'top', css: box(25, 12, 50, 54) }];
+        } else if (solid(p.k)) {
+          slots = [{ kind: p.k, tone: p.t, sub: false, fit: 'meet', css: box(20, 16, 60, 46) + ' background: ' + backdrop + '; border-radius: ' + r(0.02) + 'px;' }];
+        } else {
+          slots = [{ kind: p.k, tone: p.t, sub: false, fit: 'slice', css: box(14, 19, 72, 44) + ' border-radius: ' + r(0.02) + 'px;' }];
+        }
+      }
+    } else if (!custom) {
+      showFace = true;
+      const list = picks.slice(0, 4);
+      const L = 9.5, Tp = 23.5, W = 81, H = 61, g = 1.8;
+      const hw = (W - g) / 2, hh = (H - g) / 2;
+      let cells;
+      if (list.length === 1) {
+        cells = [[L, Tp, W, H]];
+      } else if (list.length === 2) {
+        cells = [[L, Tp, hw, H], [L + hw + g, Tp, hw, H]];
+      } else if (list.length === 3) {
+        cells = [[L, Tp, hw, H], [L + hw + g, Tp, hw, hh], [L + hw + g, Tp + hh + g, hw, hh]];
+      } else {
+        cells = [[L, Tp, hw, hh], [L + hw + g, Tp, hw, hh], [L, Tp + hh + g, hw, hh], [L + hw + g, Tp + hh + g, hw, hh]];
+      }
+      slots = list.map((p, i) => {
+        const [l, t, w, h] = cells[i];
+        if (sil) {
+          return { kind: px >= 96 ? 'type' : 'none', tone: TYPE[p.k] ?? 3, sub: !!p.sub && px >= 96, fit: 'meet',
+            css: box(l.toFixed(2), t.toFixed(2), w.toFixed(2), h.toFixed(2)) + ' background: #FFF3CF; border-radius: ' + r(0.025) + 'px;' };
+        }
+        if (bare(p.k)) {
+          return { kind: p.k, tone: p.t, sub: !!p.sub && px >= 96, fit: 'meet', css: square(l, t, w, h) + drop };
+        }
+        const bg = solid(p.k) ? backdrop : PAGE[p.k] ? '#FFFFFF' : 'transparent';
+        return { kind: p.k, tone: p.t, sub: !!p.sub && px >= 96, fit: solid(p.k) ? 'meet' : 'slice',
+          css: box(l.toFixed(2), t.toFixed(2), w.toFixed(2), h.toFixed(2)) + ' background: ' + bg + '; border-radius: ' + r(0.025) + 'px;' };
+      });
+    }
+
+    return {
+      px, zero: 0, gid: this._gid,
+      showStar: loaded && custom,
+      showInside: loaded && showInside,
+      showFace: loaded && showFace,
+      slots,
+      faceR: r(0.06),
+      flap: 'M8 ' + (T + 5) + ' Q8 ' + T + ' 13 ' + T + ' H87 Q92 ' + T + ' 92 ' + (T + 5) + ' V78 Q92 83 87 83 H13 Q8 83 8 78 Z',
+      edge: 'M13 ' + (T + 0.7) + ' H87'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -25,12 +25,13 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
 `BatchGroup` (файл + спутники: один вопрос, один шаг прогресса).
 Синхронные `CopyMany` / `MoveMany` — для тестов, продакшн — async на пуле
 с прогрессом и `CancellationToken`. Отмена посреди элемента —
-`BatchItemStatus.Cancelled`, не `Failed`: файл копируется под
-`имя.wander-tmp` (`TransientFiles.TempNameFor`) и получает имя целым;
-частично скопированная папка — в undo. Папка между томами —
-`CopyDirectory` + `DeleteDirectory`, сбой копии убирает частичную;
-read-only цели — список, второй вопрос, снятие атрибута. Ссылка на папку
-внутри копируемой не копируется (петля) — `Skipped` с
+`BatchItemStatus.Cancelled`, не `Failed`: файл копируется под временным
+именем («Надёжное копирование», «Свой цикл копирования») и получает имя
+целым; частично скопированная папка — в undo. Папка между томами
+(`MoveEntry`) — `CopyDirectory` + удаление источника, сбой копии убирает
+частичную, если папки не было до нас; read-only цели — список, второй
+вопрос, снятие атрибута. Ссылка на папку внутри копируемой не копируется
+(петля) — `CopyReport.SkippedLinks` → `Skipped` с
 `LinkNotCopiedException`; ссылка на файл копируется содержимым цели,
 ссылка-источник верхнего уровня — насквозь. Перенос такой папки между
 томами оставляет в источнике ссылку и папки над ней, остальное уходит
@@ -86,8 +87,8 @@ read-only цели — список, второй вопрос, снятие а�
     оболочка спрашивает поверх `FOF_NO_UI` с «Да» по умолчанию — поэтому
     до движка свой обход (`TooLongForBin`, порог 259). Итог — один вопрос
     после операции, окно удаления в виде «Не помещается в корзину»
-    (`DeleteQuestionKind.Refused`): причина плашкой, «Прервать» по
-    умолчанию, «Удалить безвозвратно» вне `Tab` и серая первые 0,5 с.
+    (`DeleteQuestionKind.Refused`): причина плашкой; кнопки — «Вопрос
+    перед удалением — таблицей».
   - `PostDeleteItem` отдаёт id-list элемента корзины —
     `RecycleHandle.BinItemId`; `Restore` — один `MoveItem` без обхода
     корзины (строка панели корзины несёт `BinFilePath`, `$R…`). Занятое
@@ -100,8 +101,8 @@ read-only цели — список, второй вопрос, снятие а�
     живут фейки). Без `FOFX_EARLYFAILURE`: занятый файл и папка с занятым
     внутри (остаётся **целой**) пропускаются без ожидания — `FileInUse`,
     ждёт операция (ниже). Ошибка из `PreDeleteItem` останавливает прогон
-    — это отмена (`E_ABORT`) и отказ корзины (`E_FAIL`), остаток
-    прогоняется заново. Возврат — прогон на элемент (TECHDEBT).
+    — это отмена (`E_ABORT`) и отказ корзины (`E_FAIL`); после отказа
+    остаток прогоняется заново, отмена прогон кончает. Возврат — прогон на элемент (TECHDEBT).
   - **Принято без следа** (`RecycleHandle.IsUntraceable`: ни id, ни пути
     в корзине) — удалено безвозвратно: у пакетного удаления
     `DeleteResult.Permanent`; у заменённой цели, опустевшей слитой папки и
@@ -126,8 +127,9 @@ read-only цели — список, второй вопрос, снятие а�
     запрещён» (0x80070005, стенд 2026-10-19), не «занято»: папка один раз
     обходится в поиске занятого (`FileInUse.MayBeHeldInside`, обходы — 5 с
     на операцию); нашёлся — ждётся и называется им, нет — отказ сразу;
-    `RetryMany` —
-    пачка корзины. Держатель называется один раз (`IFileLockInspector` —
+    у корзины — `RetryMany`: пропущенные занятыми элементы прогоняются
+    заново все разом на каждом шаге ожидания, без обхода папок; держатель
+    ищется у первых трёх (`NamedHeldItems`). Держатель называется один раз (`IFileLockInspector` —
     Restart Manager; своя заявка — «Wander: миниатюра»). Итог —
     `BusyReport` в `DeleteResult` / `BatchItemResult`. Ждут перенос,
     переименование, корзина, безвозвратное удаление (`DeleteForGood`) и
@@ -162,7 +164,8 @@ read-only цели — список, второй вопрос, снятие а�
   (вложенное только называется), `IShellNamespace.CopyOut` отдаёт
   `IProgress<CopyOutWork>` — операция `BytesAreWork`, только процент.
 - **Окно операции и статус-бар.** `RunWithProgressDialogAsync` открывает
-  **немодальный** `ProgressDialog` через 400 мс и без фокуса
+  **немодальный** `ProgressDialog` через 400 мс (`PathClaims.BadgeDelayMs`,
+  как часы на значке) и без фокуса
   (`ShowActivated = false`) и ждёт задачу, а не окно; модальный вопрос
   изнутри операции пережидается (`ComponentDispatcher.IsThreadModal`).
   Окно узнаёт свою операцию по токену в снимке, не по `Id`: извлечение
@@ -179,11 +182,13 @@ read-only цели — список, второй вопрос, снятие а�
   (та же пометка в журнале действий). То же число — на кнопке окна в панели
   задач (`MainViewModel.TaskbarProgress`, `TaskbarItemInfo` из кода: привязка
   там молчит): пока взвешивает — бегущая полоса, на паузе — жёлтая.
-- **Конец операции и панели.** Строка спрашивает про подпапки один раз: папка,
-  в которую идёт распаковка, спрошена пустой и оставалась без треугольника.
-  `RefreshPanelsAfter` (из `ReportBatchResultsAsync`, у извлечения — и при
-  отмене) шлёт `FolderChanged` цели и каждой севшей папке с рядом в панели:
-  открытый уровень читается заново, строки в нём спрашиваются заново.
+- **Конец операции и панели.** `RefreshPanelsAfter` (из
+  `ReportBatchResultsAsync`, у извлечения — и при отмене) шлёт
+  `FolderChanged` цели и каждой севшей папке с рядом в панели: открытый
+  уровень читается заново, строки в нём спрашиваются заново. Причина:
+  строка панели спрашивает про подпапки один раз, и папка, в которую идёт
+  распаковка, спрошенная ещё пустой, без этого оставалась без
+  треугольника.
 - **Выход при идущих операциях.** `MainWindow.OnClosing`: вопрос
   (`DialogKind.ExitWithOperations`, Cancel по умолчанию); «да» —
   `e.Cancel`, `Vm.CancelAllOperations`, `await
@@ -252,8 +257,9 @@ read-only цели — список, второй вопрос, снятие а�
   «Только для чтения» — плашкой в том же вопросе, второго нет: вопрос
   встаёт и при выключенном подтверждении корзины, пометка снимается
   после «да». Окно — `DeleteConfirmWindow` через `IDialogs.ConfirmDelete`:
-  «Отмена» по умолчанию, на `Esc` и `Enter`; кнопка безвозвратного
-  удаления вне `Tab` — только щелчком; миниатюра одного элемента — сразу,
+  «Отмена» по умолчанию (в «Не помещается в корзину» — «Прервать»), на
+  `Esc` и `Enter`; кнопка безвозвратного удаления вне `Tab` — только
+  щелчком, в «Не помещается в корзину» ещё и серая первые 0,5 с; миниатюра одного элемента — сразу,
   строки — карточкой за правым краем окна, через 0,4 с.
 - **Отступления от «всё откатываемо»:** безвозвратное удаление
   (подтверждение всегда); восстановление из корзины в `UndoService` не
@@ -288,7 +294,8 @@ read-only цели — список, второй вопрос, снятие а�
   подтверждением; источники устройства — импорт.
 - **Временные ошибки** — `TransientIo.IsTransient`: Win32 21, 23, 31, 59, 64,
   121, 1117, 1167, 1231 и `CopyMismatchException`; `IoRetry.Run` с
-  `RetryPolicy.Default` — 3 попытки, паузы 1 / 3 / 5 с, сон отменяемый; зовёт
+  `RetryPolicy.Default` — 3 попытки, паузы 1 и 3 с (третья, 5 с, — при большем числе попыток), сон
+  отменяемый; зовёт
   `BatchExecutor.ApplyOne` для копии файла и переноса между томами; номер
   попытки — `OperationSnapshot.Attempt` («повтор 2 из 3»), итог —
   `BatchItemResult.Attempts`. Занятость (0x80070020) — не временная
@@ -296,18 +303,15 @@ read-only цели — список, второй вопрос, снятие а�
 - **Свой цикл копирования** — `SystemIOFileSystem.CopyThroughTemp` →
   `CopyBytes`: цель под `имя.wander-tmp` (`TransientFiles.TempNameFor`;
   сирота с таким именем — наша, удаляется первой), `OwnCopy` —
-  `StreamCopy.Copy` (Core, тест: буфер 1 МБ, `SetLength` заранее, SHA-256
-  на лету), `Flush(flushToDisk)`, атрибуты и время изменения — после;
+  `StreamCopy.Copy` (Core, тест: буфер 1 МБ, SHA-256 на лету; `SetLength`
+  заранее — в `OwnCopy`), `Flush(flushToDisk)`, атрибуты и время изменения — после;
   `File.Move` в конечное имя — только целым; сбой и отмена — `TryDelete`.
   Без прогресса, отмены и проверки — `File.Copy`. `MoveEntry` папки между
-  томами: `CopyDirectory` + удаление источника; сбой — частичная копия
-  убирается, если папки не было до нас; ссылка на папку внутри не
-  копируется (`CopyReport.SkippedLinks` → `Skipped` с
-  `LinkNotCopiedException`), источник — `DeleteAllButLinks`.
+  томами и ссылки внутри — «Файловые операции» (голова раздела).
   `CopyReport(Engine, Verified, SkippedLinks)` → итог элемента и строка
   лога; `IFileSystem.WriteFromStream` — тот же цикл для потока устройства.
 - **Откат на `CopyFileEx`** (решение человека 2026-10-15: правило в коде, не
-  настройка). `SystemCopyReason`: `Encrypted`, `SparseFile`, дополнительные
+  настройка). `SystemCopyReason` (причина строкой или null): `Encrypted`, `SparseFile`, дополнительные
   потоки (`FindFirstStreamW`; `Zone.Identifier`), оба конца на одном
   SMB-сервере, один том ReFS → `CopyFileWithProgress` (`CopyFileExW`,
   прогресс дельтами, отмена `PROGRESS_CANCEL`), проверка — хэши обеих
@@ -322,7 +326,8 @@ read-only цели — список, второй вопрос, снятие а�
   «проверено N». Настройка «Проверять скопированное» —
   `AppSettings.VerifyCopies` (`VerifyPolicy`: `Removable` по умолчанию —
   источник на `VolumeKind.Removable` или устройство; `Always`; `Never`) →
-  `CopyVerification.ShouldVerify` в `FileOperationService.CopyOptionsFor`.
+  `CopyVerification.ShouldVerify` в `BatchExecutor.CopyOptionsFor` (задаёт
+  `FileOperationService`).
   Стенд V1 (`measurements/0.6-dev.md`): на SSD свой цикл вровень с
   `CopyFileEx`, проверка +10–20 %; флешка, кардридер, HDD, SMB — PLAN 0.7.
   Внешний USB-диск у Windows `Fixed` — по умолчанию не проверяется (TECHDEBT).
@@ -347,10 +352,10 @@ read-only цели — список, второй вопрос, снятие а�
   Deleted, Restored, Created, Extracted, Cancelled, ActionRun, Error, Note),
   `Headline`, `Lines` (строка на файл, «было → стало»), `Severity`; `Render`
   — первые 50 строк и «… ещё N», предел 500 записей; `Note` — строки без
-  структуры. `ReportBatchResults` строит запись из `OperationRecord`, статус
+  структуры. `ReportBatchResultsAsync` строит запись из `OperationRecord`, статус
   — `SetStatusQuietly`; открытие и запуск — `FileOpened`. Лог:
   `BatchExecutor` — `Copy done: 12 items, 12.3 GB, 327.4 s, 38.5 MB/s;
-  failed 1, skipped 0`. Строки отката — `IUndoableAction.Verb` / `ItemCount`,
+  failed 1, skipped 0, cancelled 0, verified 12`. Строки отката — `IUndoableAction.Verb` / `ItemCount`,
   `Description` — только в лог.
 - **Съёмные диски** (Y2) — `IVolumeChanges` (Core): `Changed(VolumeChange(Root,
   Arrived, IsDevice))`, `Releasing(root)`. `VolumeChangeHub` (Platform):
@@ -374,7 +379,8 @@ read-only цели — список, второй вопрос, снятие а�
   меню диска (MENU). Открытая папка на томе уходит, `ReleasePreview`, глагол
   оболочки `eject` корня свежей сессией меню (`InvokeEject`; нет глагола —
   `StatusEjectNoVerb`); панели после глагола не перечитываются. Ушёл ли том
-  — по букве (`WaitForVolumeGone`: `GetLogicalDrives` раз в 2 с, до 5 с);
+  — по букве (`WaitForVolumeGone`: `GetLogicalDrives` раз в 250 мс, готовность
+  носителя — раз в 2 с, до `EjectAnswerMs` = 5 с);
   ушёл — `Ejected`: статус и перечитывание дисков; не ушёл — `WhoHoldsDrive`
   (файлы операции → `IFileLockInspector`), «не извлечён: …» и ещё 2 мин
   ожидания. WebView2 уходит на `about:blank` при уходе с веб-вида
@@ -452,7 +458,10 @@ read-only цели — список, второй вопрос, снятие а�
 - **Внутри архива выключено решением**: удаление, переименование,
   вырезать, вставка, создание, drop внутрь, сторож, оценки, спутники,
   поиск по содержимому и подпапкам, статистика папки. Меню внутри — пять
-  строк, не серые: серая строка обещает «потом». «Извлечь рядом» —
+  строк, не серые: серая строка обещает «потом». «Извлечь сюда» броска
+  (`DropExtractHere`) — `ExtractionService.ExtractIntoNewFolderAsync`:
+  новая папка по имени архива, откат — `ExtractAction` на папку.
+  «Извлечь рядом» —
   `FixedConflictResolver(Rename)`: никого не спросили — ничего не
   заменяется. Миниатюры — только картинки: `IsThumbnailable` → false (шелл
   ответил бы значком типа и писал бы его в общий `thumbcache`); папке
@@ -630,8 +639,8 @@ Listing/RatedListing     WithRatings() листинг → тот же с Rating 
 
 | Шаблон | Пример | Кто |
 |---|---|---|
-| `Appended` — к полному имени | `Sprite.png.meta`, `IMG.CR2.pp3`, `IMG.CR2.xmp` | Unity, RawTherapee, darktable, Takeout |
-| `Replaced` — заменяет расширение | `IMG_1234.xmp` | Adobe, Bridge, exiftool, `.AAE` |
+| `Appended` — к полному имени | `Sprite.png.meta`, `IMG.CR2.pp3`, `IMG.CR2.xmp` | Unity, RawTherapee, darktable; Takeout — пример схемы, правила нет |
+| `Replaced` — заменяет расширение | `IMG_1234.xmp` | Adobe, Bridge, exiftool; `.AAE` — пример схемы, правила нет |
 
 `Appended` — по точному имени, `Replaced` — по stem'у. Два претендента на
 stem: сайдкар — RAW, если RAW среди них ровно один (`IMG.CR2` +
