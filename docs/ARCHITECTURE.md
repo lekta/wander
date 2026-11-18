@@ -169,15 +169,15 @@ src/
 <!-- deps:generated:begin -->
 ```
 === Wander dependency graph (using sweep) ===
-date   : 2026-11-06
-commit : 9b0d36f
+date   : 2026-11-17
+commit : b769df5
 
 -- Wander.Core: levels --
   0: (root), Appearance, Imaging, Layout, Localization, Logging, Panels
   1: Diagnostics, Icons, Operations
   2: Undo
   3: FileSystem
-  4: Companions, Folders, Navigation, Preview
+  4: Companions, Folders, Navigation, Pins, Preview
   5: Actions, Rename
   6: Persistence, Search
   7: Listing, Shell
@@ -185,9 +185,10 @@ commit : 9b0d36f
   9: Workspace
 
 -- Wander.Platform.Windows: levels --
-  0: Diagnostics, Imaging, Logging, Persistence, Power, Preview, Search, Shell
+  0: Diagnostics, Logging, Persistence, Power, Preview, Search, Shell
   1: FileSystem, Icons
-  2: (root)
+  2: Imaging
+  3: (root)
 
 -- Wander.App: levels --
   0: Menu, Resources
@@ -321,7 +322,7 @@ CS8602 / CS8604 в конструкторе — сломан порядок; (2)
 |---|---|
 | FILEOPS | операции и батчи, undo, корзина, занятые пути, прогресс и окно операции, конфликты, защита; надёжное копирование: запись операции, повтор, свой цикл, проверка, съёмные диски, извлечение; корзина, архивы, телефон и камера как папки, извлечение; спутники |
 | WINDOW | модель окна (`Core/Workspace`, `Core/Panels`) и исполнитель, навигация и панели, контролы и границы вью, диалоги, клавиатурные области, цвета и тема, плитки и `VirtualizingWrapPanel`, значки и миниатюры, отзывчивость, замеры |
-| LISTING | сессия папки и посадка строк, выделение и каретка, буфер, drag & drop, сторож, поиск, галерея и оценки |
+| LISTING | сессия папки и посадка строк, выделение и каретка, буфер, drag & drop, сторож, поиск, галерея и оценки, пины |
 | MENU | контекстное меню и шелл, меню «Действия», свои действия, групповое переименование |
 | PREVIEW | панель просмотра, маршруты и форматы, зум и полный экран, медиа, миниатюры мимо шелла, хелперы отсмотра |
 
@@ -398,7 +399,8 @@ Debug из Rider делят `%LOCALAPPDATA%\Wander` — так задумано.
 до 4000; `bookmark-titles.json` (`IBookmarkTitleStore` →
 `JsonBookmarkTitleStore`): свои названия закладок, путь → название —
 отдельным файлом, потому что старая сборка пишет `state.json` целиком и
-стёрла бы незнакомый блок (BACKLOG AD11). Читается синхронно в `RestoreState`, пишется из `WriteStateNow`
+стёрла бы незнакомый блок (BACKLOG AD11); `pins.json` (`IPinStore` →
+`JsonPinStore`): пины — LISTING, «Пины». Читается синхронно в `RestoreState`, пишется из `WriteStateNow`
 тем же дебаунсом. На приходе дата создания читается на пуле с листингом;
 папка **без** записи проверяет `AdoptCandidates` (та же дата и том,
 другой путь), и ровно один пропавший усыновляется (`Adopt`) — закрепление

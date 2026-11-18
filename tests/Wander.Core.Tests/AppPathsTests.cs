@@ -20,6 +20,17 @@ public class AppPathsTests {
     }
 
     [Fact]
+    public void Pins_LiveInTheirOwnFile_InTheDataRoot() {
+        try {
+            AppPaths.Override(@"C:\data");
+
+            Assert.Equal(@"C:\data\pins.json", AppPaths.PinsFile);
+        } finally {
+            AppPaths.Resolve(Array.Empty<string>());
+        }
+    }
+
+    [Fact]
     public void Yield_ComesFromTheCommandLine() {
         try {
             AppPaths.Resolve(new[] { "--YIELD" });

@@ -11,6 +11,9 @@ public enum PathHolder {
     /// <summary>The views pinned to folders (FolderSettingsBook).</summary>
     FolderBook,
 
+    /// <summary>The pins on files and folders (PinBook).</summary>
+    Pins,
+
     /// <summary>The address bar's recent places.</summary>
     RecentPaths,
 
@@ -42,6 +45,7 @@ public static class PathFollowing {
         PathHolder.Panels,
         PathHolder.Bookmarks,
         PathHolder.FolderBook,
+        PathHolder.Pins,
         PathHolder.RecentPaths,
         PathHolder.SelectionMemory,
         PathHolder.Clipboard,

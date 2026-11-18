@@ -23,6 +23,9 @@ public enum VolumeFill {
 /// A volume, described. Sizes are bytes; <paramref name="TotalBytes"/> is
 /// zero when the drive is not ready (an empty card reader, a disconnected
 /// share), which is the case the pane has to be able to say out loud.
+/// <paramref name="Serial"/> is the volume's serial number, null when it
+/// could not be read (not ready, a device): what tells one flash drive from
+/// another under the same letter.
 /// </summary>
 public sealed record VolumeInfo(
     string Root,
@@ -31,7 +34,8 @@ public sealed record VolumeInfo(
     VolumeKind Kind,
     long TotalBytes,
     long FreeBytes,
-    bool IsReady) {
+    bool IsReady,
+    uint? Serial = null) {
 
     public long UsedBytes => Math.Max(0, TotalBytes - FreeBytes);
 

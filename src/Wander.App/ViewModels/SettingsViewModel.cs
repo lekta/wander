@@ -162,6 +162,13 @@ public sealed class SettingsViewModel : ObservableObject {
         set => SetField(ref _showFolderSizes, value);
     }
 
+    private bool _removeGonePins;
+    /// <summary>A pin on what is gone is taken off at the listing - see <see cref="AppSettings.RemoveGonePins"/>.</summary>
+    public bool RemoveGonePins {
+        get => _removeGonePins;
+        set => SetField(ref _removeGonePins, value);
+    }
+
     private bool _visibleFirstLoading;
     /// <summary>Icons for what is on screen load first - see <see cref="AppSettings.VisibleFirstLoading"/>.</summary>
     public bool VisibleFirstLoading {
@@ -802,6 +809,7 @@ public sealed class SettingsViewModel : ObservableObject {
         AutoRefresh = s.AutoRefresh;
         RememberFolderPlace = s.RememberFolderPlace;
         RememberFolderFilter = s.RememberFolderFilter;
+        RemoveGonePins = s.RemoveGonePins;
         VisibleFirstLoading = s.VisibleFirstLoading;
         ShowFolderSizes = s.ShowFolderSizes;
         ShowHidden = s.ShowHidden;
@@ -1066,6 +1074,7 @@ public sealed class SettingsViewModel : ObservableObject {
             AutoRefresh = AutoRefresh,
             RememberFolderPlace = RememberFolderPlace,
             RememberFolderFilter = RememberFolderFilter,
+            RemoveGonePins = RemoveGonePins,
             VisibleFirstLoading = VisibleFirstLoading,
             ShowFolderSizes = ShowFolderSizes,
             ShowHidden = ShowHidden,

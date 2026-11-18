@@ -60,6 +60,9 @@ public static class AppPaths {
     /// <summary>The bookmarks' own names (<c>IBookmarkTitleStore</c>).</summary>
     public static string BookmarkTitlesFile => Path.Combine(DataRoot, "bookmark-titles.json");
 
+    /// <summary>The pins on files and folders (<c>IPinStore</c>).</summary>
+    public static string PinsFile => Path.Combine(DataRoot, "pins.json");
+
     public static string Logs => Path.Combine(DataRoot, "logs");
 
     public static string Thumbs => Path.Combine(DataRoot, "thumbs");

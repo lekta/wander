@@ -1,15 +1,15 @@
 === Wander dependency graph (using sweep) ===
-date   : 2026-11-06
-commit : 9b0d36f
+date   : 2026-11-17
+commit : b769df5
 
 -- projects --
 Wander.App -> Wander.Core   (84 files)
 Wander.App -> Wander.Platform.Windows   (2 files)
-Wander.Core.Tests -> Wander.Core   (207 files)
+Wander.Core.Tests -> Wander.Core   (211 files)
 Wander.Harness -> Wander.App   (4 files)
 Wander.Harness -> Wander.Core   (9 files)
 Wander.Harness -> Wander.Platform.Windows   (4 files)
-Wander.Platform.Windows -> Wander.Core   (57 files)
+Wander.Platform.Windows -> Wander.Core   (58 files)
 
 -- Wander.Core: folder -> folder --
   Actions        -> FileSystem     (7 files)
@@ -58,7 +58,9 @@ Wander.Platform.Windows -> Wander.Core   (57 files)
   Persistence    -> Layout         (1 files)
   Persistence    -> Localization   (1 files)
   Persistence    -> Navigation     (1 files)
+  Persistence    -> Pins           (1 files)
   Persistence    -> Rename         (1 files)
+  Pins           -> FileSystem     (2 files)
   Preview        -> FileSystem     (16 files)
   Preview        -> Icons          (2 files)
   Preview        -> Imaging        (1 files)
@@ -91,7 +93,7 @@ Wander.Platform.Windows -> Wander.Core   (57 files)
   1: Diagnostics, Icons, Operations
   2: Undo
   3: FileSystem
-  4: Companions, Folders, Navigation, Preview
+  4: Companions, Folders, Navigation, Pins, Preview
   5: Actions, Rename
   6: Persistence, Search
   7: Listing, Shell
@@ -111,11 +113,13 @@ Wander.Platform.Windows -> Wander.Core   (57 files)
   (root)         -> Shell          (1 files)
   FileSystem     -> Shell          (1 files)
   Icons          -> Shell          (1 files)
+  Imaging        -> Icons          (1 files)
 
 -- Wander.Platform.Windows: levels --
-  0: Diagnostics, Imaging, Logging, Persistence, Power, Preview, Search, Shell
+  0: Diagnostics, Logging, Persistence, Power, Preview, Search, Shell
   1: FileSystem, Icons
-  2: (root)
+  2: Imaging
+  3: (root)
 
 -- Wander.App: folder -> folder --
   (root)         -> Controllers    (2 files)
@@ -142,7 +146,7 @@ Wander.Platform.Windows -> Wander.Core   (57 files)
   Controls       -> Diagnostics    (1 files)
   Controls       -> Preview        (3 files)
   Controls       -> Resources      (3 files)
-  Controls       -> Util           (3 files)
+  Controls       -> Util           (2 files)
   Controls       -> ViewModels     (2 files)
   Converters     -> Resources      (2 files)
   Converters     -> Util           (3 files)

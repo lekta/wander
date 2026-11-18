@@ -27,6 +27,7 @@ public class PathFollowingTests {
 
         Assert.True(order.IndexOf(PathHolder.SelectionMemory) < order.IndexOf(PathHolder.History));
         Assert.True(order.IndexOf(PathHolder.FolderBook) < order.IndexOf(PathHolder.History));
+        Assert.True(order.IndexOf(PathHolder.Pins) < order.IndexOf(PathHolder.History));
     }
 
     /// <summary>Several folders moved at once: each holder hears of every one before the next holder hears of any.</summary>

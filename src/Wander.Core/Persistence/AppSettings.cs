@@ -97,6 +97,14 @@ public sealed record AppSettings {
     /// </summary>
     public bool ShowFolderSizes { get; init; } = true;
 
+    /// <summary>
+    /// A pin whose file or folder is no longer there, its disk being in
+    /// place, is taken off when the folder is listed (PLAN, "Pins": decision
+    /// 2026-11-17). On by default, as decided; off keeps such pins for the
+    /// user to clear. A disk that is not plugged in keeps its pins either way.
+    /// </summary>
+    public bool RemoveGonePins { get; init; } = true;
+
 
     // --- Safety --------------------------------------------------------
     /// <summary>Show files / folders with the <c>Hidden</c> attribute.</summary>

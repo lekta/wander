@@ -32,6 +32,7 @@ using Wander.Core.Navigation;
 using Wander.Core.Operations;
 using Wander.Core.Panels;
 using Wander.Core.Persistence;
+using Wander.Core.Pins;
 using Wander.Core.Preview;
 using Wander.Core.Rename;
 using Wander.Core.Search;
@@ -85,6 +86,13 @@ public sealed class MainViewModel : ObservableObject {
     private const int StateSaveDelayMs = 500;
 
     /// <summary>
+    /// How long a path Wander renamed is taken for its own when the watcher
+    /// reports it (FollowWatchedPins): the watcher answers within a tick or
+    /// two, the margin is for a slow disk.
+    /// </summary>
+    private const int OwnRenameMemorySeconds = 30;
+
+    /// <summary>
     /// How long an operation runs before its window comes up (2026-09-21).
     /// Most are over long before that - a delete of one file, an undo of a
     /// rename, a refusal that takes no time at all - and a window flashing
@@ -120,6 +128,7 @@ public sealed class MainViewModel : ObservableObject {
     private readonly IAppStateStore _stateStore;
     private readonly IFolderSettingsStore _folderStore;
     private readonly IBookmarkTitleStore _bookmarkTitleStore;
+    private readonly IPinStore _pinStore;
     private readonly IDialogs _dialogs;
     private readonly IFileLockInspector? _lockInspector;
     private readonly NavigationController _nav;
@@ -179,6 +188,23 @@ public sealed class MainViewModel : ObservableObject {
     // change; the flag rides the same debounced save as state.json.
     private FolderSettingsBook _folders = new();
     private bool _foldersDirty;
+
+    // The pins on files and folders (PinBook, pins.json): every change the
+    // book reports raises the flag, written by the same debounced save.
+    private PinBook _pins = new();
+    private bool _pinsDirty;
+    private int _pinVolumesRead;
+
+    // The volume snapshot is the latest one read: false from startup until
+    // it is in, and while a re-read after a volume change is on its way -
+    // a stick swapped under the same letter must not be swept by the old
+    // one's key.
+    private bool _pinVolumesFresh;
+
+    // Paths Wander itself renamed or moved lately, with when: the watcher
+    // reports those renames again, and replaying a swap through scratch
+    // names would undo what FollowPins already did.
+    private readonly Dictionary<string, DateTime> _ownRenamed = new(StringComparer.OrdinalIgnoreCase);
 
     // The bookmarks' own names (bookmark-titles.json) changed since the last
     // write: the same debounced save as state.json.
@@ -322,6 +348,7 @@ public sealed class MainViewModel : ObservableObject {
         _stateStore = ServiceLocator.Get<IAppStateStore>();
         _folderStore = ServiceLocator.Get<IFolderSettingsStore>();
         _bookmarkTitleStore = ServiceLocator.Get<IBookmarkTitleStore>();
+        _pinStore = ServiceLocator.Get<IPinStore>();
         _dialogs = ServiceLocator.Get<IDialogs>();
         _lockInspector = ServiceLocator.TryGet<IFileLockInspector>();
         _ops = ServiceLocator.Get<FileOperationService>();
@@ -2289,6 +2316,9 @@ public sealed class MainViewModel : ObservableObject {
                 case PathHolder.FolderBook:
                     _foldersDirty |= _folders.Follow(from, to) > 0;
                     break;
+                case PathHolder.Pins:
+                    FollowPins(new[] { (from, to) });
+                    break;
                 case PathHolder.RecentPaths:
                     _nav.RewriteRecentPaths(from, to);
                     break;
@@ -2325,6 +2355,88 @@ public sealed class MainViewModel : ObservableObject {
         SaveState();
 
         return followed;
+    }
+
+    /// <summary>
+    /// The pins go where Wander saw its own operation take their items
+    /// (<see cref="PinBook.Follow(IReadOnlyList{ValueTuple{string, string}})"/>):
+    /// all moves at once. Both ends are noted, for the watcher not to replay
+    /// them (<see cref="FollowWatchedPins"/>).
+    /// </summary>
+    private void FollowPins(IReadOnlyList<(string From, string To)> moves) {
+        var now = DateTime.UtcNow;
+        foreach (var (from, to) in moves) {
+            _ownRenamed[from] = now;
+            _ownRenamed[to] = now;
+        }
+        int followed = _pins.Follow(moves);
+        if (followed > 0) {
+            string more = moves.Count > 1 ? $" and {moves.Count - 1} more moves" : "";
+            _log.Info($"Pins follow: {followed} - {moves[0].From} -> {moves[0].To}{more}");
+        }
+    }
+
+    /// <summary>
+    /// Renames the watcher saw, in the order they happened - one at a time,
+    /// so a chain or a name given back ends where the files did. A rename
+    /// touching a path Wander itself renamed lately is its own coming back:
+    /// FollowPins has already taken those pins along.
+    /// </summary>
+    private void FollowWatchedPins(IReadOnlyList<(string From, string To)> renames) {
+        var now = DateTime.UtcNow;
+        foreach (var stale in _ownRenamed.Where(p => now - p.Value > TimeSpan.FromSeconds(OwnRenameMemorySeconds)).Select(p => p.Key).ToList()) {
+            _ownRenamed.Remove(stale);
+        }
+        foreach (var (from, to) in renames) {
+            if (_ownRenamed.ContainsKey(from) || _ownRenamed.ContainsKey(to)) {
+                continue;
+            }
+            int followed = _pins.Follow(from, to);
+            if (followed > 0) {
+                _log.Info($"Pins follow the watcher: {followed} - {from} -> {to}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A folder listed to the end: pins whose items are back from the bin
+    /// come into sight, pins on what is gone are taken off - unless the
+    /// setting keeps them (<see cref="AppSettings.RemoveGonePins"/>). Not
+    /// while the volume snapshot is behind or was read again during the
+    /// listing, while an operation or a rename is running
+    /// (<paramref name="quiet"/> - at the start - and now), or when the
+    /// book changed during the listing (<paramref name="listedAt"/>): the
+    /// names may predate a pin's move.
+    /// </summary>
+    private void SweepPins(string folder, IReadOnlyCollection<string> names, int listedAt, bool quiet) {
+        if (!quiet || !_pinVolumesFresh || HasActiveOperations || _renamesInFlight > 0) {
+            return;
+        }
+
+        var removed = _pins.Sweep(folder, names, Settings.RemoveGonePins, listedAt);
+        if (removed.Count > 0) {
+            _log.Info($"Pins swept: {removed.Count} gone - {folder}");
+        }
+    }
+
+    /// <summary>
+    /// Deleted items' pins: into the bin - kept, out of sight and out of the
+    /// sweep, until the listing finds the item back; for good - a permanent
+    /// delete, or the bin taking it without a trace - dropped.
+    /// </summary>
+    private void DropOrHidePins(IReadOnlyList<DeleteResult> deleted, bool permanent) {
+        int hidden = 0;
+        int dropped = 0;
+        foreach (var result in deleted) {
+            if (permanent || result.Permanent) {
+                dropped += _pins.Forget(result.Path);
+            } else {
+                hidden += _pins.MarkRecycled(result.Path);
+            }
+        }
+        if (hidden + dropped > 0) {
+            _log.Info($"Pins of deleted items: {hidden} to the bin, {dropped} dropped");
+        }
     }
 
     /// <summary>
@@ -2398,8 +2510,41 @@ public sealed class MainViewModel : ObservableObject {
 
             return;
         }
+        _ = RefreshPinVolumesAsync();
         if (!change.Arrived) {
             _ = LeaveRemovedVolumeAsync();
+        }
+    }
+
+    /// <summary>
+    /// The volumes the pins are keyed against (PinKeys): the drives the
+    /// computer's listing shows, read on the pool - a sleeping drive answers
+    /// slowly - at startup and whenever a volume comes or goes. A read
+    /// overtaken by a later one is dropped.
+    /// </summary>
+    private async Task RefreshPinVolumesAsync() {
+        int read = ++_pinVolumesRead;
+        _pinVolumesFresh = false;
+        try {
+            var volumes = await Task.Run(() => {
+                var provider = ServiceLocator.TryGet<IVolumeInfoProvider>();
+                if (provider is null) {
+                    return Array.Empty<PinVolume>();
+                }
+
+                return PinKeys.Snapshot(DriveInfo.GetDrives()
+                    .Select(d => provider.Describe(d.Name))
+                    .OfType<VolumeInfo>());
+            });
+            if (read != _pinVolumesRead) {
+                return;
+            }
+
+            _pins.SetVolumes(volumes);
+            _pinVolumesFresh = true;
+            _log.Info($"Pin volumes: {volumes.Count}, removable {volumes.Count(v => v.IsRemovable)}");
+        } catch (Exception ex) {
+            _log.Warn($"Pin volumes not read: {ex.Message}");
         }
     }
 
@@ -2694,6 +2839,15 @@ public sealed class MainViewModel : ObservableObject {
             _log.Info($"Pinned views moved from state.json into folders.json: {session.ManualViewModes.Count}");
         }
 
+        // The pins, read in one go like the folder records.
+        _pins = new PinBook(_pinStore.Load());
+        _pins.Changed += (_, _) => {
+            _pinsDirty = true;
+            SaveState();
+        };
+        _log.Info($"Pins loaded: {_pins.Count} in {_pins.FolderCount} folders{(_pinStore.IsReadOnly ? " (read-only)" : "")}");
+        _ = RefreshPinVolumesAsync();
+
         _isPreviewVisible = session.IsPreviewVisible;
         Raise(nameof(IsPreviewVisible));
         Preview.SetVisible(_isPreviewVisible);
@@ -2933,6 +3087,10 @@ public sealed class MainViewModel : ObservableObject {
             _foldersDirty = false;
             _folderStore.Save(_folders.Records);
         }
+        if (_pinsDirty) {
+            _pinsDirty = false;
+            _pinStore.Save(_pins.Snapshot());
+        }
         if (_bookmarkTitlesDirty) {
             _bookmarkTitlesDirty = false;
             _bookmarkTitleStore.Save(Bookmarks.Titles.All);
@@ -3126,6 +3284,8 @@ public sealed class MainViewModel : ObservableObject {
         // file follows its new name (decision B7).
         if (decision.Renames is { Count: > 0 } renames) {
             _landingRenames.AddRange(renames);
+            // Their pins too, one by one; ours coming back are skipped.
+            FollowWatchedPins(renames);
         }
 
         // Before anything is re-read: what the caches hold about these files
@@ -3274,6 +3434,13 @@ public sealed class MainViewModel : ObservableObject {
         // neither the view (ViewChoice) nor the book.
         var known = arriving && _folders.Find(path) is null ? _folders.Records : null;
 
+        // Every name in the folder, hidden ones too, for the pins' sweep -
+        // a folder on a disk only: not a shell place under a path-like name.
+        var names = Path.IsPathFullyQualified(path) ? new List<string>() : null;
+        int pinsAt = _pins.Version;
+        bool pinsQuiet = !HasActiveOperations && _renamesInFlight == 0 && _pinVolumesFresh;
+        int volumesAt = _pinVolumesRead;
+
         var work = Task.Run(() => {
             var items = new List<FileSystemEntry>();
             int hidden = 0;
@@ -3298,6 +3465,7 @@ public sealed class MainViewModel : ObservableObject {
             using (PerfLog.Measure("bg.enumerate")) {
                 foreach (var e in _fs.Enumerate(path, sort, token)) {
                     token.ThrowIfCancellationRequested();
+                    names?.Add(e.Name);
                     // Seen before the visibility filter: the file is hidden
                     // and a system one, and the setting that hides it has
                     // nothing to say about what it tells.
@@ -3390,6 +3558,9 @@ public sealed class MainViewModel : ObservableObject {
             _hiddenCount = hidden;
             _session.NoteListed(path);
             SetMissingFolder(null);
+            if (names is not null) {
+                SweepPins(path, names, pinsAt, pinsQuiet && volumesAt == _pinVolumesRead);
+            }
             if (arriving) {
                 // The journal's backbone: "where was I when this happened".
                 // Only on arrival — an F5 or a re-read after an operation is
@@ -5435,6 +5606,9 @@ public sealed class MainViewModel : ObservableObject {
 
         var gone = results.Where(r => r.Status == DeleteStatus.Ok).Select(r => r.Path).ToList();
         int ok = gone.Count;
+        // Before the re-listing below sweeps: a pin in the bin is kept out
+        // of sight and out of the sweep; one deleted for good goes with it.
+        DropOrHidePins(results.Where(r => r.Status == DeleteStatus.Ok).ToList(), permanent);
         int failed = results.Count(r => r.Status == DeleteStatus.Failed);
 
         // The panels show folders too, and a folder deleted from a panel is
@@ -5856,6 +6030,8 @@ public sealed class MainViewModel : ObservableObject {
             string renamed = Path.Combine(folder, newName);
             if (entry.Kind != EntryKind.Directory) {
                 _landingRenames.Add((entry.FullPath, renamed));
+                // A folder's pins go with FollowRelocated below.
+                FollowPins(new[] { (entry.FullPath, renamed) });
             }
             if (takeFocus) {
                 _session.SetArrivalHere(ArrivalIntent.Rows(folder, new[] { renamed }, takeFocus: true));
@@ -6099,6 +6275,10 @@ public sealed class MainViewModel : ObservableObject {
         var arrived = renamed
             .Select(r => Path.Combine(Path.GetDirectoryName(r.Path) ?? "", r.NewName))
             .ToArray();
+        // The pins go with the names, all at once - two names may have
+        // swapped. The other holders of a renamed folder's path do not
+        // follow here (TECHDEBT).
+        FollowPins(renamed.Select((r, i) => (r.Path, arrived[i])).ToArray());
         // The renamed rows are new rows: the keyboard went with the old ones.
         _session.SetArrivalHere(ArrivalIntent.Rows(folder, arrived, takeFocus: true));
         Refresh();

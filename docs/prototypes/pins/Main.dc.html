@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Wander: место «Пины»</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.w{--chrome:#F3F3F3;--pane:#F8F8F8;--content:#FFFFFF;--strip:#F7F7F7;--header:#EEEEEE;--sep:#DDDDDD;--text:#000000;--muted:#555555;--dim:#6E6E6E;--disabled:#767676;--hover:#E5F3FB;--sel:#CCE8FF;--selb:#AFD9F2;--input:#FFFFFF;--inputb:#ABADB3;--ctlhover:#E5E5E5;--checked:#D0D0D0;--status:#F1EDED;--accent:#0067C0;--warn:#A05000;--headline:#E5E5E5;--menu:#FBFBFB;--menub:#CFCFCF;--menuhi:#ECECEC}
+.w.dark{--chrome:#202020;--pane:#1C1C1C;--content:#191919;--strip:#242424;--header:#2B2B2B;--sep:#3A3A3A;--text:#F0F0F0;--muted:#BDBDBD;--dim:#999999;--disabled:#8A8A8A;--hover:#2A2D30;--sel:#1E3F5C;--selb:#2F5D85;--input:#2B2B2B;--inputb:#5C5C5C;--ctlhover:#333333;--checked:#404040;--status:#202020;--accent:#60B0F0;--warn:#E8A33D;--headline:#3A3A3A;--menu:#2C2C2C;--menub:#454545;--menuhi:#3D3D3D}
+.w{width:1180px;height:700px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--chrome);color:var(--text);font:12px "Segoe UI",system-ui,sans-serif;border:1px solid var(--sep);overflow:hidden}
+.w button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:left;cursor:default}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.on{fill:currentColor}
+.ck{width:14px;text-align:center}
+.prow.grp .pmain{color:var(--dim)}
+.bar{position:relative;height:40px;flex:none;display:flex;align-items:center;gap:6px;padding:0 8px;border-bottom:1px solid var(--sep)}
+.w .tb{min-width:28px;height:28px;display:flex;align-items:center;justify-content:center;gap:4px;padding:0 5px;box-sizing:border-box;border-radius:3px;color:var(--muted)}
+.w .tb:hover{background:var(--ctlhover)}
+.w .tb.on{background:var(--checked);color:var(--text)}
+.addr{flex:1;height:26px;display:flex;align-items:center;gap:4px;padding:0 8px;background:var(--input);border:1px solid var(--inputb)}
+.addr .chev{color:var(--dim)}
+.find{width:200px;height:26px;display:flex;align-items:center;padding:0 8px;background:var(--input);border:1px solid var(--inputb);color:var(--disabled);box-sizing:border-box}
+.body{flex:1;min-height:0;display:flex}
+.pane{width:230px;flex:none;background:var(--pane);border-right:1px solid var(--sep);display:flex;flex-direction:column}
+.ph{height:24px;flex:none;display:flex;align-items:center;background:var(--header);color:var(--muted);font-weight:600;border-top:1px solid var(--sep);border-bottom:1px solid var(--sep)}
+.ph:first-child{border-top:0}
+.w .phm{flex:1;height:100%;padding:0 8px;display:flex;align-items:center;gap:6px;font-weight:600}
+.w .phm:hover{background:var(--ctlhover)}
+.ph.cur .phm{color:var(--accent)}
+.ph .cnt{color:var(--dim);font-weight:400}
+.w .hb{width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:3px;color:var(--muted)}
+.w .hb:hover{background:var(--ctlhover)}
+.prow{position:relative;height:24px;flex:none;display:flex;align-items:center;border:1px solid transparent;box-sizing:border-box}
+.prow:hover{background:var(--hover)}
+.prow.cur{background:var(--sel);border-color:var(--selb)}
+.w .pmain{flex:1;min-width:0;height:22px;display:flex;align-items:center;gap:6px;padding:0 8px;white-space:nowrap;overflow:hidden}
+.prow .cnt{margin-left:auto;color:var(--dim);padding-left:6px}
+.prow.off .pmain{color:var(--disabled)}
+.w .more{width:20px;height:20px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:3px;color:transparent;margin-right:2px}
+.prow:hover .more,.ph:hover .more,.w .more.open{color:var(--muted)}
+.w .more:hover{background:var(--ctlhover)}
+.rule{height:1px;flex:none;background:var(--sep);margin:4px 8px}
+.grow{flex:1}
+.menu{position:absolute;z-index:5;min-width:190px;padding:4px;background:var(--menu);border:1px solid var(--menub);border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.22);display:flex;flex-direction:column;font-weight:400;color:var(--text)}
+.w .mi{height:26px;padding:0 10px;border-radius:4px;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.w .mi:hover{background:var(--menuhi)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--content)}
+.strip{height:32px;flex:none;display:flex;align-items:center;gap:6px;padding:0 8px;background:var(--strip);border-bottom:1px solid var(--sep)}
+.w .sb{height:24px;display:flex;align-items:center;gap:5px;padding:0 7px;border-radius:3px;border:1px solid transparent;color:var(--muted)}
+.w .sb:hover{background:var(--ctlhover)}
+.w .sb.on{background:var(--checked);color:var(--text);border-color:var(--inputb)}
+.hint{color:var(--dim)}
+.th{height:24px;flex:none;display:grid;grid-template-columns:28px minmax(0,1fr) 100px 150px;align-items:center;color:var(--muted);border-bottom:1px solid var(--headline)}
+.th span{padding:0 8px;border-left:1px solid var(--headline);height:100%;display:flex;align-items:center}
+.th span:first-child{border-left:0}
+.rows{flex:1;min-height:0;overflow:auto;position:relative}
+.gh{height:26px;display:flex;align-items:center;gap:6px;padding:0 8px;margin-top:6px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--headline)}
+.gh .cnt{color:var(--dim);font-weight:400}
+.row{position:relative;height:24px;display:flex;align-items:center;border:1px solid transparent;box-sizing:border-box}
+.row:hover{background:var(--hover)}
+.row.sel{background:var(--sel);border-color:var(--selb)}
+.w .pin{width:28px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;color:transparent}
+.row:hover .pin{color:var(--disabled)}
+.w .pin.set,.row:hover .pin.set{color:var(--accent)}
+.w .cells{flex:1;min-width:0;height:22px;display:grid;grid-template-columns:minmax(0,1fr) 100px 150px;align-items:center}
+.cells span{padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm{display:flex;align-items:center;gap:6px}
+.nm .ic{color:var(--muted)}
+.sub{color:var(--dim)}
+.row.gone .nm,.row.gone .sub{color:var(--disabled)}
+.row.gone .st{color:var(--warn)}
+.empty{padding:48px 0;text-align:center;color:var(--dim)}
+.sbar{height:24px;flex:none;display:flex;align-items:center;gap:18px;padding:0 10px;background:var(--status);border-top:1px solid var(--sep);color:var(--muted)}
+.sbar .note{color:var(--warn)}
+</style>
+</helmet>
+<div class="w {{themeCls}}">
+
+  <div class="bar">
+    <button class="tb" aria-label="Назад" title="Назад" onClick="{{ goBack }}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 3.5 5 8l4.5 4.5"/></svg></button>
+    <button class="tb" aria-label="Вперёд" title="Вперёд"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 3.5 11 8l-4.5 4.5"/></svg></button>
+    <button class="tb" aria-label="Вверх" title="Вверх"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 9.5 8 5l4.5 4.5"/></svg></button>
+    <div class="addr">
+      <sc-if value="{{ isFolder }}" hint-placeholder-val="{{ true }}">
+        <span>D:</span><span class="chev">›</span><span>Фото</span><span class="chev">›</span><span>Отпуск 2026</span>
+      </sc-if>
+      <sc-if value="{{ isPins }}" hint-placeholder-val="{{ false }}">
+        <svg class="ic on" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 2l4 4-2.4.7-2.2 2.2.4 3L8 13.7 2.3 8 4 6.2l3 .4 2.2-2.2z"/><path d="M5 11 2 14"/></svg><span>Пины</span>
+        <sc-if value="{{ hasCrumb }}" hint-placeholder-val="{{ false }}"><span class="chev">›</span><span>{{crumb}}</span></sc-if>
+      </sc-if>
+    </div>
+    <div class="find">Поиск</div>
+    <button class="tb {{panelBtnCls}}" onClick="{{ panelsMenu }}" title="Панели" aria-label="Панели"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10M10.5 3v10"/></svg></button>
+    <sc-if value="{{ panelsOpen }}" hint-placeholder-val="{{ false }}">
+      <div class="menu" style="right: 8px; top: 36px">
+        <button class="mi" onClick="{{ toggleDrives }}"><span class="ck">{{ckDrives}}</span>Компьютер</button>
+        <button class="mi" onClick="{{ toggleMarks }}"><span class="ck">{{ckMarks}}</span>Закладки</button>
+        <button class="mi" onClick="{{ togglePins }}"><span class="ck">{{ckPins}}</span>Пины</button>
+        <button class="mi"><span class="ck">✓</span>Панель просмотра</button>
+      </div>
+    </sc-if>
+  </div>
+
+  <div class="body">
+    <div class="pane">
+      <sc-if value="{{ showDrives }}" hint-placeholder-val="{{ true }}">
+      <div class="ph"><span class="phm">Компьютер</span></div>
+      <div class="prow"><button class="pmain"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="5" width="12" height="6" rx="1"/></svg>Система (C:)</button></div>
+      <div class="prow"><button class="pmain"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="5" width="12" height="6" rx="1"/></svg>Данные (D:)</button></div>
+      <div class="prow"><button class="pmain" style="padding-left: 24px"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>Фото</button></div>
+      <div class="prow {{folderCur}}"><button class="pmain" style="padding-left: 40px" onClick="{{ goFolder }}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>Отпуск 2026</button></div>
+      <div class="prow"><button class="pmain" style="padding-left: 56px"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>Горы</button></div>
+      </sc-if>
+      <div class="grow"></div>
+
+      <sc-if value="{{ showMarks }}" hint-placeholder-val="{{ true }}">
+      <div class="ph"><span class="phm">Закладки</span></div>
+      <div class="prow"><button class="pmain"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3" width="11" height="8" rx="1"/><path d="M6 13.5h4"/></svg>Рабочий стол</button></div>
+      <div class="prow"><button class="pmain"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M4.5 7.5 8 11l3.5-3.5M3 13.5h10"/></svg>Загрузки</button></div>
+      <div class="prow"><button class="pmain"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 5h9l-.8 8.5H4.3zM2.5 5h11M6.5 3h3"/></svg>Корзина</button></div>
+
+      <sc-if value="{{ isBookmarkVariant }}" hint-placeholder-val="{{ false }}">
+        <div class="prow {{allCur}}">
+          <button class="hb" onClick="{{ toggleExpand }}" aria-label="Развернуть" title="Развернуть"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="{{chevPath}}"/></svg></button>
+          <button class="pmain" style="padding-left: 2px" onClick="{{ goAll }}"><svg class="ic on" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 2l4 4-2.4.7-2.2 2.2.4 3L8 13.7 2.3 8 4 6.2l3 .4 2.2-2.2z"/><path d="M5 11 2 14"/></svg>Пины<span class="cnt">{{allCount}}</span></button>
+          <button class="more {{headMoreCls}}" onClick="{{ headMenu }}" aria-label="Действия с пинами" title="Действия с пинами"><svg class="ic on" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg></button>
+          <sc-if value="{{ headMenuOpen }}" hint-placeholder-val="{{ false }}">
+            <div class="menu" style="right: 4px; top: 22px">
+              <button class="mi" onClick="{{ unpinAll }}">Снять все пины…</button>
+              <sc-if value="{{ hasLostAll }}" hint-placeholder-val="{{ false }}"><button class="mi" onClick="{{ dropLost }}">Убрать потерянные ({{lostAllCount}})</button></sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <div class="rule"></div>
+      <div class="prow"><button class="pmain" onClick="{{ goFolder }}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>Отпуск 2026</button></div>
+      </sc-if>
+
+      <sc-if value="{{ showPanel }}" hint-placeholder-val="{{ true }}">
+        <div class="ph {{allCurHead}}" style="position: relative; margin-top: 6px">
+          <button class="phm" onClick="{{ goAll }}" title="Все пины, по папкам"><svg class="ic on" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 2l4 4-2.4.7-2.2 2.2.4 3L8 13.7 2.3 8 4 6.2l3 .4 2.2-2.2z"/><path d="M5 11 2 14"/></svg>Пины<span class="cnt">{{allCount}}</span></button>
+          <button class="more {{headMoreCls}}" onClick="{{ headMenu }}" aria-label="Действия с пинами" title="Действия с пинами"><svg class="ic on" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg></button>
+          <button class="hb" onClick="{{ togglePanel }}" aria-label="Закрыть плашку" title="Закрыть плашку"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+          <sc-if value="{{ headMenuOpen }}" hint-placeholder-val="{{ false }}">
+            <div class="menu" style="right: 24px; top: 22px">
+              <button class="mi" onClick="{{ unpinAll }}">Снять все пины…</button>
+              <sc-if value="{{ hasLostAll }}" hint-placeholder-val="{{ false }}"><button class="mi" onClick="{{ dropLost }}">Убрать потерянные ({{lostAllCount}})</button></sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showDirs }}" hint-placeholder-val="{{ true }}">
+        <sc-for list="{{ dirs }}" as="d" hint-placeholder-count="5">
+          <sc-if value="{{ d.isGroup }}" hint-placeholder-val="{{ false }}">
+            <div class="prow grp"><span class="pmain" style="{{d.pad}}" title="{{d.path}}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>{{d.name}}</span></div>
+          </sc-if>
+          <sc-if value="{{ d.isDir }}" hint-placeholder-val="{{ true }}">
+          <div class="prow {{d.cls}}">
+            <button class="pmain" style="{{d.pad}}" onClick="{{ d.open }}" title="{{d.path}}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>{{d.name}}<span class="cnt">{{d.count}}</span></button>
+            <button class="more {{d.moreCls}}" onClick="{{ d.menu }}" aria-label="Действия с папкой" title="Действия с папкой"><svg class="ic on" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg></button>
+            <sc-if value="{{ d.menuOpen }}" hint-placeholder-val="{{ false }}">
+              <div class="menu" style="right: 4px; top: 22px">
+                <button class="mi" onClick="{{ d.openReal }}">Открыть папку</button>
+                <button class="mi" onClick="{{ d.unpin }}">Снять пины папки</button>
+              </div>
+            </sc-if>
+          </div>
+          </sc-if>
+        </sc-for>
+      </sc-if>
+      <div style="height: 8px; flex: none"></div>
+    </div>
+
+    <div class="main">
+
+      <sc-if value="{{ isFolder }}" hint-placeholder-val="{{ true }}">
+        <div class="strip">
+          <sc-if value="{{ hasHerePins }}" hint-placeholder-val="{{ true }}">
+            <button class="sb {{onlyCls}}" onClick="{{ toggleOnly }}" title="Показать только пины этой папки" aria-label="Только пины"><svg class="ic on" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 2l4 4-2.4.7-2.2 2.2.4 3L8 13.7 2.3 8 4 6.2l3 .4 2.2-2.2z"/><path d="M5 11 2 14"/></svg>{{hereCount}}</button>
+          </sc-if>
+          <div class="grow"></div>
+          <span class="hint">Щелчок слева от имени ставит и снимает пин</span>
+        </div>
+      </sc-if>
+
+      <div class="th"><span></span><span>Имя</span><span>Размер</span><span>Изменён</span></div>
+
+      <div class="rows">
+        <sc-for list="{{ rows }}" as="item" hint-placeholder-count="8">
+          <sc-if value="{{ item.isHead }}" hint-placeholder-val="{{ false }}">
+            <div class="gh"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>{{item.title}}<span class="cnt">{{item.count}}</span></div>
+          </sc-if>
+          <sc-if value="{{ item.isRow }}" hint-placeholder-val="{{ true }}">
+            <div class="row {{item.cls}}" onContextMenu="{{ item.ctx }}">
+              <button class="pin {{item.pinCls}}" onClick="{{ item.toggle }}" title="{{item.pinTitle}}" aria-label="{{item.pinTitle}}"><svg class="ic on" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 2l4 4-2.4.7-2.2 2.2.4 3L8 13.7 2.3 8 4 6.2l3 .4 2.2-2.2z"/><path d="M5 11 2 14"/></svg></button>
+              <button class="cells" onClick="{{ item.pick }}">
+                <span class="nm">
+                  <sc-if value="{{ item.isDir }}" hint-placeholder-val="{{ false }}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg></sc-if>
+                  <sc-if value="{{ item.isFile }}" hint-placeholder-val="{{ true }}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h5l3 3v8H4zM9 2.5v3h3"/></svg></sc-if>
+                  {{item.name}}
+                </span>
+                <span class="sub">{{item.size}}</span>
+                <span class="sub st">{{item.when}}</span>
+              </button>
+              <sc-if value="{{ item.menuOpen }}" hint-placeholder-val="{{ false }}">
+                <div class="menu" style="left: 220px; top: 20px">
+                  <button class="mi" onClick="{{ item.reveal }}">Перейти к расположению</button>
+                  <button class="mi" onClick="{{ item.unpin }}">{{item.unpinText}}</button>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </sc-for>
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div class="empty">{{emptyText}}</div>
+        </sc-if>
+      </div>
+
+      <div class="sbar">
+        <span>{{status1}}</span>
+        <span>{{status2}}</span>
+        <span>{{status3}}</span>
+        <span class="note">{{note}}</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Светлая","Тёмная"],"default":"Светлая"},"showGone":{"editor":"boolean","default":false},"$preview":{"width":1180,"height":700}}'>
+class Component extends DCLogic {
+  state = {
+    place: 'folder',
+    pinDir: null,
+    panelOpen: true,
+    drivesOpen: true,
+    marksOpen: true,
+    expanded: true,
+    menu: null,
+    only: false,
+    sel: [],
+    note: '',
+    pinned: { a2: true, a4: true, a5: true, a8: true, m1: true, m2: true, m3: true, d1: true, d2: true, n1: true, l1: true, l2: true, o1: true, o2: true }
+  };
+
+  files() {
+    const here = 'D:\\Фото\\Отпуск 2026';
+    return [
+      { id: 'g0', name: 'Горы', dir: here, dirKind: true, size: '', when: '14.08.2026 19:02' },
+      { id: 'a1', name: 'IMG_4401.CR3', dir: here, size: '31,2 МБ', when: '12.08.2026 09:14' },
+      { id: 'a2', name: 'IMG_4402.CR3', dir: here, size: '30,8 МБ', when: '12.08.2026 09:14' },
+      { id: 'a3', name: 'IMG_4403.CR3', dir: here, size: '31,0 МБ', when: '12.08.2026 09:15' },
+      { id: 'a4', name: 'IMG_4404.CR3', dir: here, size: '32,4 МБ', when: '12.08.2026 09:21' },
+      { id: 'a5', name: 'IMG_4405.CR3', dir: here, size: '31,7 МБ', when: '12.08.2026 09:21' },
+      { id: 'a6', name: 'IMG_4406.CR3', dir: here, size: '30,1 МБ', when: '12.08.2026 09:40' },
+      { id: 'a7', name: 'IMG_4407.CR3', dir: here, size: '30,9 МБ', when: '12.08.2026 09:41' },
+      { id: 'a8', name: 'маршрут.gpx', dir: here, size: '184 КБ', when: '11.08.2026 22:05' },
+      { id: 'a9', name: 'список вещей.txt', dir: here, size: '2 КБ', when: '02.08.2026 18:30' },
+      { id: 'l1', name: 'IMG_4410.CR3', dir: here, gone: 'lost' },
+      { id: 'm1', name: 'IMG_4512.CR3', dir: here + '\\Горы', size: '33,0 МБ', when: '14.08.2026 06:02' },
+      { id: 'm2', name: 'IMG_4519.CR3', dir: here + '\\Горы', size: '32,6 МБ', when: '14.08.2026 06:11' },
+      { id: 'm3', name: 'IMG_4533.CR3', dir: here + '\\Горы', size: '31,9 МБ', when: '14.08.2026 07:48' },
+      { id: 'd1', name: 'Аренда 2026.pdf', dir: 'D:\\Документы\\Договоры', size: '412 КБ', when: '03.03.2026 11:20' },
+      { id: 'd2', name: 'Акт сверки.xlsx', dir: 'D:\\Документы\\Договоры', size: '58 КБ', when: '28.10.2026 16:44' },
+      { id: 'n1', name: 'notes.md', dir: 'C:\\Dev\\wander', size: '9 КБ', when: '15.11.2026 23:10' },
+      { id: 'l2', name: 'setup_1.4.exe', dir: 'D:\\Загрузки', gone: 'lost' },
+      { id: 'o1', name: 'IMG_0012.JPG', dir: 'E:\\DCIM\\100CANON', gone: 'off' },
+      { id: 'o2', name: 'IMG_0031.JPG', dir: 'E:\\DCIM\\100CANON', gone: 'off' }
+    ];
+  }
+
+  renderVals() {
+    const here = 'D:\\Фото\\Отпуск 2026';
+    const s = this.state;
+    const showGone = this.props.showGone ?? false;
+    const asPanel = true;
+    const isPins = s.place === 'pins';
+    const all = this.files().filter((f) => showGone || !f.gone);
+    const pinnedAll = all.filter((f) => s.pinned[f.id]);
+    const leaf = (p) => p.slice(p.lastIndexOf('\\') + 1);
+    const set = (patch) => this.setState(Object.assign({ note: '', menu: null }, patch));
+    const stop = (e) => { if (e) { e.stopPropagation(); } };
+    const sameMenu = (m) => s.menu && s.menu.kind === m.kind && s.menu.key === m.key;
+    const flip = (m) => (e) => { stop(e); set({ menu: sameMenu(m) ? null : m }); };
+    const unpinIds = (ids, extra) => {
+      const pinned = Object.assign({}, s.pinned);
+      ids.forEach((id) => { pinned[id] = false; });
+      set(Object.assign({ pinned: pinned, sel: s.sel.filter((x) => ids.indexOf(x) < 0) }, extra || {}));
+    };
+    const reveal = (f) => {
+      if (f.dir === here && !f.gone) {
+        set({ place: 'folder', only: false, sel: [f.id] });
+      } else {
+        this.setState({ menu: null, note: 'В примерке открывается только «Отпуск 2026»' });
+      }
+    };
+
+    const dirNames = [];
+    pinnedAll.forEach((f) => { if (dirNames.indexOf(f.dir) < 0) { dirNames.push(f.dir); } });
+
+    const dirRow = (dir, depth) => {
+      const items = pinnedAll.filter((f) => f.dir === dir);
+      const off = items.every((f) => f.gone === 'off');
+      const m = { kind: 'dir', key: dir };
+      return {
+        name: leaf(dir),
+        path: off ? dir + ' (диск отключён)' : dir,
+        count: items.length,
+        isDir: true,
+        isGroup: false,
+        pad: 'padding-left: ' + (8 + depth * 16) + 'px',
+        cls: (isPins && s.pinDir === dir ? 'cur ' : '') + (off ? 'off' : ''),
+        moreCls: sameMenu(m) ? 'open' : '',
+        menuOpen: sameMenu(m),
+        open: () => set({ place: 'pins', pinDir: dir, sel: [] }),
+        menu: flip(m),
+        openReal: () => {
+          if (dir === here) {
+            set({ place: 'folder', sel: [] });
+          } else {
+            this.setState({ menu: null, note: 'В примерке открывается только «Отпуск 2026»' });
+          }
+        },
+        unpin: () => unpinIds(items.map((f) => f.id), isPins && s.pinDir === dir ? { pinDir: null } : null)
+      };
+    };
+
+    // Folders as a tree: a node is drawn if it holds pins, or if two or
+    // more branches with pins part under it; the rest are skipped.
+    const trie = { kids: {}, order: [] };
+    dirNames.forEach((dir) => {
+      let n = trie;
+      const segs = dir.split('\\');
+      segs.forEach((seg, i) => {
+        if (!n.kids[seg]) {
+          n.kids[seg] = { seg: seg, path: segs.slice(0, i + 1).join('\\'), kids: {}, order: [] };
+          n.order.push(seg);
+        }
+        n = n.kids[seg];
+      });
+      n.holds = true;
+    });
+    const dirs = [];
+    const walk = (n, depth) => {
+      n.order.forEach((seg) => {
+        const k = n.kids[seg];
+        if (k.holds) {
+          dirs.push(dirRow(k.path, depth));
+          walk(k, depth + 1);
+        } else if (k.order.length > 1) {
+          dirs.push({ isGroup: true, isDir: false, name: k.seg, path: k.path, pad: 'padding-left: ' + (8 + depth * 16) + 'px' });
+          walk(k, depth + 1);
+        } else {
+          walk(k, depth);
+        }
+      });
+    };
+    walk(trie, 0);
+
+    let list;
+    if (isPins) {
+      list = s.pinDir ? pinnedAll.filter((f) => f.dir === s.pinDir) : pinnedAll;
+    } else {
+      list = all.filter((f) => f.dir === here && !f.gone);
+      if (s.only) {
+        list = list.filter((f) => f.dirKind || s.pinned[f.id]);
+      }
+    }
+
+    const selShown = s.sel.filter((id) => list.some((f) => f.id === id));
+    const toRow = (f) => {
+      const on = !!s.pinned[f.id];
+      const selected = s.sel.indexOf(f.id) >= 0;
+      const m = { kind: 'row', key: f.id };
+      const many = selected && selShown.length > 1;
+      return {
+        isRow: true,
+        isHead: false,
+        name: f.name,
+        size: f.size || '',
+        when: f.gone === 'lost' ? 'нет файла' : f.gone === 'off' ? 'диск E: отключён' : f.when,
+        isDir: !!f.dirKind,
+        isFile: !f.dirKind,
+        cls: (selected ? 'sel ' : '') + (f.gone ? 'gone' : ''),
+        pinCls: on ? 'set' : '',
+        pinTitle: on ? 'Снять пин' : 'Поставить пин',
+        menuOpen: isPins && sameMenu(m),
+        unpinText: many ? 'Снять пины (' + selShown.length + ')' : 'Снять пин',
+        pick: (e) => {
+          const multi = e && (e.ctrlKey || e.metaKey);
+          let sel;
+          if (multi) {
+            sel = selected ? s.sel.filter((x) => x !== f.id) : s.sel.concat([f.id]);
+          } else {
+            sel = [f.id];
+          }
+          set({ sel: sel });
+        },
+        ctx: (e) => {
+          if (!isPins) {
+            return;
+          }
+          if (e) {
+            e.preventDefault();
+          }
+          set({ menu: m, sel: selected ? s.sel : [f.id] });
+        },
+        toggle: () => {
+          const pinned = Object.assign({}, s.pinned);
+          pinned[f.id] = !on;
+          set({ pinned: pinned, sel: isPins ? s.sel.filter((x) => x !== f.id) : s.sel });
+        },
+        reveal: () => reveal(f),
+        unpin: () => unpinIds(many ? selShown : [f.id])
+      };
+    };
+
+    let rows = [];
+    if (isPins && !s.pinDir) {
+      dirNames.forEach((dir) => {
+        const items = list.filter((f) => f.dir === dir);
+        rows.push({ isHead: true, isRow: false, title: dir, count: items.length });
+        rows = rows.concat(items.map(toRow));
+      });
+    } else {
+      rows = list.map(toRow);
+    }
+
+    const lost = list.filter((f) => f.gone === 'lost');
+    const off = list.filter((f) => f.gone === 'off');
+    const lostAll = pinnedAll.filter((f) => f.gone === 'lost');
+    const hereCount = all.filter((f) => f.dir === here && !f.gone && s.pinned[f.id]).length;
+    const headM = { kind: 'head', key: '' };
+    const panelsM = { kind: 'panels', key: '' };
+    const allCur = isPins && !s.pinDir;
+
+    return {
+      themeCls: (this.props.theme ?? 'Светлая') === 'Тёмная' ? 'dark' : '',
+      isPins: isPins,
+      isFolder: !isPins,
+      isPanelVariant: asPanel,
+      isBookmarkVariant: !asPanel,
+      showPanel: asPanel && s.panelOpen,
+      showDirs: asPanel ? s.panelOpen : s.expanded,
+      panelBtnCls: sameMenu(panelsM) ? 'on' : '',
+      panelsOpen: sameMenu(panelsM),
+      panelsMenu: flip(panelsM),
+      showDrives: s.drivesOpen,
+      showMarks: s.marksOpen,
+      ckDrives: s.drivesOpen ? '✓' : '',
+      ckMarks: s.marksOpen ? '✓' : '',
+      ckPins: s.panelOpen ? '✓' : '',
+      toggleDrives: () => this.setState({ drivesOpen: !s.drivesOpen }),
+      toggleMarks: () => this.setState({ marksOpen: !s.marksOpen }),
+      togglePins: () => this.setState({ panelOpen: !s.panelOpen }),
+      chevPath: s.expanded ? 'M4.5 6.5 8 10l3.5-3.5' : 'M6.5 4.5 10 8l-3.5 3.5',
+      hasCrumb: isPins && !!s.pinDir,
+      crumb: s.pinDir ? leaf(s.pinDir) : '',
+      folderCur: isPins ? '' : 'cur',
+      allCur: allCur ? 'cur' : '',
+      allCurHead: allCur ? 'cur' : '',
+      allCount: pinnedAll.length || '',
+      headMoreCls: sameMenu(headM) ? 'open' : '',
+      headMenuOpen: sameMenu(headM),
+      hasLostAll: lostAll.length > 0,
+      lostAllCount: lostAll.length,
+      dirs: dirs,
+      hereCount: hereCount,
+      hasHerePins: hereCount > 0 || s.only,
+      onlyCls: s.only ? 'on' : '',
+      rows: rows,
+      isEmpty: rows.length === 0,
+      emptyText: isPins ? 'Пинов нет' : 'В этой папке пинов нет',
+      status1: isPins ? 'Пинов ' + list.length : 'Объектов ' + list.length,
+      status2: selShown.length ? 'выделено ' + selShown.length : '',
+      status3: isPins ? ((lost.length ? 'потеряно ' + lost.length + '   ' : '') + (off.length ? 'недоступно ' + off.length : '')) : (hereCount ? 'пинов ' + hereCount : ''),
+      note: s.note,
+      goFolder: () => set({ place: 'folder', sel: [] }),
+      goAll: () => set({ place: 'pins', pinDir: null, sel: [] }),
+      goBack: () => set({ place: isPins ? 'folder' : 'pins', sel: [] }),
+      togglePanel: () => set({ panelOpen: !s.panelOpen }),
+      toggleExpand: () => set({ expanded: !s.expanded }),
+      toggleOnly: () => set({ only: !s.only }),
+      headMenu: flip(headM),
+      unpinAll: () => unpinIds(pinnedAll.map((f) => f.id), { pinDir: null }),
+      dropLost: () => unpinIds(lostAll.map((f) => f.id))
+    };
+  }
+}
+</script>
+</body>
+</html>

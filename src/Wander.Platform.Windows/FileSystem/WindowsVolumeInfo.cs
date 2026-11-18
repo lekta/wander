@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+using System.Text;
 using Wander.Core.FileSystem;
 
 namespace Wander.Platform.Windows.FileSystem;
@@ -50,7 +52,8 @@ public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
                 // Available, not free: on a volume with quotas the number
                 // that matters is what this user may still write.
                 drive.AvailableFreeSpace,
-                IsReady: true);
+                IsReady: true,
+                SerialOf(root));
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
             return new VolumeInfo(root, "", "", kind, 0, 0, IsReady: false);
         }
@@ -109,4 +112,17 @@ public sealed class WindowsVolumeInfo : IVolumeInfoProvider {
             _ => VolumeKind.Unknown,
         };
     }
+
+    /// <summary>The volume's serial number, or null when the system does not give one.</summary>
+    private static uint? SerialOf(string root) {
+        return GetVolumeInformation(root, null, 0, out uint serial, out _, out _, null, 0) ? serial : null;
+    }
+
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetVolumeInformationW", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetVolumeInformation(
+        string rootPathName, StringBuilder? volumeNameBuffer, int volumeNameSize,
+        out uint volumeSerialNumber, out uint maximumComponentLength, out uint fileSystemFlags,
+        StringBuilder? fileSystemNameBuffer, int fileSystemNameSize);
 }
