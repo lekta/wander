@@ -819,6 +819,9 @@
   <data name="CrashNonFatal" xml:space="preserve">
     <value>Wander ran into an unexpected error.</value>
   </data>
+  <data name="CrashStartupFailed" xml:space="preserve">
+    <value>Wander could not start.&#xA;&#xA;{0}: {1}</value>
+  </data>
   <data name="CrashFallbackPrompt" xml:space="preserve">
     <value>Wander ran into an unexpected error.&#xA;&#xA;{0}: {1}&#xA;&#xA;Prepare a report (error details only, without the session log)?</value>
   </data>

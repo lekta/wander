@@ -70,6 +70,25 @@ public sealed record FileSystemEntry(
     public bool IsFolderLike => Kind == EntryKind.Directory || LinksToDirectory;
 
     /// <summary>
+    /// This row with what <paramref name="fresh"/> - the file read again -
+    /// says now about it on disk: its size, its date, its attributes. The
+    /// rest is the listing's and its passes' - companions, rating, search
+    /// snippet, sharpness, folder size, volume, former place - and stays
+    /// (audit 2026-11-18, P3: a file another program writes kept the size
+    /// and the date it had when the folder was listed).
+    /// </summary>
+    public FileSystemEntry Restated(FileSystemEntry fresh) {
+        return this with {
+            Size = fresh.Size,
+            ModifiedUtc = fresh.ModifiedUtc,
+            IsHidden = fresh.IsHidden,
+            IsReadOnly = fresh.IsReadOnly,
+            IsSystem = fresh.IsSystem,
+        };
+    }
+
+
+    /// <summary>
     /// Whether two readings of the same file say the same thing.
     ///
     /// <para>

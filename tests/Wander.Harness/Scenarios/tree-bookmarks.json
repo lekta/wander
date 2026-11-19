@@ -150,9 +150,7 @@
     { "do": "assert-tree", "path": "{sandbox}\\photos\\bookmarked", "exists": false },
 
     {
-      // The tidy-up above is a permanent delete, and every one of those
-      // writes an audit line at WARN.
-      "do": "assert-log", "scope": "all", "noErrors": true, "allow": [ "Permanent delete" ]
+      "do": "assert-log", "scope": "all", "noErrors": true
     }
   ]
 }

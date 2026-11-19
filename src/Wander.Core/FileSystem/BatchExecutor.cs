@@ -812,7 +812,10 @@ internal sealed class BatchExecutor {
                 } else {
                     throw new FileNotFoundException("Path not found", path);
                 }
-                _log.Warn($"Permanent delete: {path}");
+                // INFO: asked for and confirmed - an audit line, not a
+                // warning (audit 2026-11-18, L11: three in four WARNs of the
+                // live logs were these, and the real ones drowned).
+                _log.Info($"Permanent delete: {path}");
                 results.Add(new DeleteResult(path, DeleteStatus.Ok, null, busy));
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                 // Stopped while waiting for it: still there, as asked.
@@ -824,6 +827,8 @@ internal sealed class BatchExecutor {
 
             progress.Advance(path);
         }
+
+        _log.Info($"Permanent delete: {results.Count(r => r.Status == DeleteStatus.Ok)} of {paths.Count} gone");
 
         return results;
     }

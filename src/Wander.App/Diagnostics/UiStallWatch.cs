@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows.Threading;
 using Wander.Core.Diagnostics;
+using Wander.Core.Logging;
 
 namespace Wander.App.Diagnostics;
 
@@ -32,15 +33,25 @@ public static class UiStallWatch {
     /// </summary>
     private const double StallMs = 150;
 
+    // How often the watch looks up while the window has not answered yet.
+    private const int SilenceCheckMs = 250;
+
     private static Thread? _worker;
 
 
-    public static void Start(Dispatcher dispatcher) {
+    /// <param name="dispatcher">The window's thread, the one watched.</param>
+    /// <param name="isActive">
+    /// Whether a window of Wander is active - asked from the watch's thread,
+    /// so a field the window keeps, not a property of it. In the background
+    /// a stop is the system waking an idle thread, not work (audit
+    /// 2026-11-18, L6): not written, and the pulse slows to a minute (L7).
+    /// </param>
+    public static void Start(Dispatcher dispatcher, Func<bool> isActive) {
         if (_worker is not null) {
             return;
         }
 
-        _worker = new Thread(() => Loop(dispatcher)) {
+        _worker = new Thread(() => Loop(dispatcher, isActive)) {
             IsBackground = true,
             Name = "wander-ui-stall-watch",
         };
@@ -48,21 +59,36 @@ public static class UiStallWatch {
     }
 
 
-    private static void Loop(Dispatcher dispatcher) {
+    private static void Loop(Dispatcher dispatcher, Func<bool> isActive) {
         while (true) {
             var waited = Stopwatch.StartNew();
+            // Input priority: queued behind everything the window is
+            // actually doing, so the wait *is* the busy time. Waited for in
+            // slices, not without end: a window that does not answer at all
+            // is said from here while it lasts, whatever its state - a
+            // freeze ended in the task manager used to leave the log simply
+            // stopping (audit 2026-11-18, L5).
+            var ping = dispatcher.InvokeAsync(() => { }, DispatcherPriority.Input);
+            int said = 0;
             try {
-                // Input priority: queued behind everything the window is
-                // actually doing, so the wait *is* the busy time.
-                dispatcher.Invoke(() => { }, DispatcherPriority.Input);
-            } catch (TaskCanceledException) {
+                while (!ping.Task.Wait(SilenceCheckMs)) {
+                    if (UiWatchRules.SilenceToSay(waited.Elapsed, said) is { } mark) {
+                        said = mark;
+                        Log.Current.Warn($"UI not responding for {mark} s");
+                        SystemVitals.Sample();
+                    }
+                }
+            } catch (AggregateException) {
+                // The dispatcher is shutting down: the ping was dropped.
                 return;
-            } catch (OperationCanceledException) {
+            }
+            if (ping.Status != DispatcherOperationStatus.Completed) {
                 return;
             }
 
+            bool active = isActive();
             double elapsed = waited.Elapsed.TotalMilliseconds;
-            if (elapsed >= StallMs) {
+            if (elapsed >= StallMs && active) {
                 PerfLog.Note("ui.stall", elapsed);
                 // What the process looked like while the window was
                 // stuck. Sampled here rather than on the interval so
@@ -73,7 +99,7 @@ public static class UiStallWatch {
 
             PerfLog.Tick();
             PerfCounters.Tick();
-            SystemVitals.Tick();
+            SystemVitals.Tick(UiWatchRules.PulseInterval(active));
             Thread.Sleep(PingMs);
         }
     }

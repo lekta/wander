@@ -371,7 +371,21 @@ public partial class MainWindow : Window {
         Wander.Core.Diagnostics.PerfLog.Start(log);
         Diagnostics.PerfCounters.Start(log);
         Diagnostics.SystemVitals.Start(log);
-        Diagnostics.UiStallWatch.Start(Dispatcher);
+        // Active is any window of Wander - a dialog, the full-screen view -
+        // not only this one: a stall there is one the person feels. A
+        // harness or smoke window is never active: there everything is
+        // written as it always was.
+        if (Application.Current is { } app) {
+            app.Activated += OnApplicationActivated;
+            app.Deactivated += OnApplicationDeactivated;
+            // Activated before this line ran, the event has been and gone.
+            _isActive = IsActive;
+            Closed += (_, _) => {
+                app.Activated -= OnApplicationActivated;
+                app.Deactivated -= OnApplicationDeactivated;
+            };
+        }
+        Diagnostics.UiStallWatch.Start(Dispatcher, () => App.Headless || _isActive);
         // Bubbling, so it sees focus landing anywhere in the window.
         GotKeyboardFocus += OnZoneFocusChanged;
         Vm.Workspace.ViewEffectRequested += OnViewEffectRequested;
@@ -961,6 +975,17 @@ public partial class MainWindow : Window {
 
     /// <summary>The window was just activated: the next focus change is WPF putting the keyboard back.</summary>
     private bool _justActivated;
+
+    /// <summary>Whether a window of Wander is active, for the watch over the window's thread - read from that thread, so a field, not <see cref="Window.IsActive"/>.</summary>
+    private volatile bool _isActive;
+
+    private void OnApplicationActivated(object? sender, EventArgs e) {
+        _isActive = true;
+    }
+
+    private void OnApplicationDeactivated(object? sender, EventArgs e) {
+        _isActive = false;
+    }
 
     /// <summary>
     /// The last keyboard move the model asked for while the window was not

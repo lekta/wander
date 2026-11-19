@@ -904,6 +904,12 @@
   <data name="CrashNonFatal" xml:space="preserve">
     <value>В Wander произошла неожиданная ошибка.</value>
   </data>
+  <data name="CrashStartupFailed" xml:space="preserve">
+    <value>Wander не запустился.
+
+{0}: {1}</value>
+    <comment>{0} — тип исключения, {1} — сообщение; до выбора языка — по культуре ОС</comment>
+  </data>
   <data name="CrashFallbackPrompt" xml:space="preserve">
     <value>В Wander произошла неожиданная ошибка.
 

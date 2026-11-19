@@ -105,9 +105,10 @@ public class RepeatCollapserTests {
 
     [Fact]
     public void Summary_ReadsAsOneLine() {
-        var summary = new RepeatCollapser.Summary(16277, TimeSpan.FromSeconds(271));
+        var last = new DateTime(2026, 10, 9, 16, 55, 12, DateTimeKind.Utc);
+        var summary = new RepeatCollapser.Summary(16277, TimeSpan.FromSeconds(271), last);
 
-        Assert.Equal("repeated 16277 times over 271 s", summary.Line);
+        Assert.Equal($"repeated 16277 times over 271 s, last at {last.ToLocalTime():HH:mm:ss}", summary.Line);
     }
 
 

@@ -20,6 +20,7 @@ using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.App.ViewModels;
 using Wander.Core.FileSystem;
+using Wander.Core.Logging;
 using Wander.Core.Persistence;
 using Wander.Core.Preview;
 
@@ -449,16 +450,14 @@ public partial class PreviewPane : UserControl {
                 break;
 
             case nameof(PreviewController.WebUri):
-                if (Controller.WebUri is { } uri) {
-                    await EnsureWebViewReadyAsync();
+                if (Controller.WebUri is { } uri && await EnsureWebViewReadyAsync()) {
                     WebPreview.DefaultBackgroundColor = System.Drawing.Color.White;
                     try { WebPreview.Source = uri; } catch { /* webview not ready */ }
                 }
                 break;
 
             case nameof(PreviewController.WebHtml):
-                if (Controller.WebHtml is { } html) {
-                    await EnsureWebViewReadyAsync();
+                if (Controller.WebHtml is { } html && await EnsureWebViewReadyAsync()) {
                     // Wander's own page: its stylesheet is dark with the
                     // theme, so the paper under it is too - no white frame
                     // before the page is drawn.
@@ -654,9 +653,29 @@ public partial class PreviewPane : UserControl {
     }
 
 
-    private async Task EnsureWebViewReadyAsync() {
+    /// <summary>
+    /// The browser, ready with its locks on - true only once the filters
+    /// that keep a previewed page off the network are registered: a
+    /// failure between creating it and registering them used to leave a
+    /// browser that navigated without them (audit 2026-11-18, L12). A
+    /// failure is an ERROR once a session; the panes ask again on every
+    /// page, and a missing runtime would say it on every arrow key. Two
+    /// pages asked for while the browser is still starting wait for the
+    /// same start: a second start of its own failed, and said so falsely.
+    /// </summary>
+    private Task<bool> EnsureWebViewReadyAsync() {
+        if (_webStart is null || (_webStart.IsCompleted && !_webStart.Result)) {
+            _webStart = StartWebViewAsync();
+        }
+
+        return _webStart;
+    }
+
+    private Task<bool>? _webStart;
+
+    private async Task<bool> StartWebViewAsync() {
         if (_webInitialized) {
-            return;
+            return true;
         }
         try {
             // Explicit user-data folder: the default is "<exe dir>.WebView2",
@@ -677,51 +696,63 @@ public partial class PreviewPane : UserControl {
                 browserExecutableFolder: null, userDataFolder: dataFolder, options: options);
             await WebPreview.EnsureCoreWebView2Async(env);
 
-            if (WebPreview.CoreWebView2 is { } core) {
-                core.Settings.AreDefaultContextMenusEnabled = false;
-                core.Settings.AreDevToolsEnabled = false;
-
-                // The pane renders untrusted local files (any .html the user
-                // clicks), so lock it down: no autofill surfaces, no host
-                // object / postMessage bridge into the app.
-                core.Settings.IsPasswordAutosaveEnabled = false;
-                core.Settings.IsGeneralAutofillEnabled = false;
-                core.Settings.AreHostObjectsAllowed = false;
-                core.Settings.IsWebMessageEnabled = false;
-
-                // No popups, and the pane itself may only display local
-                // content: a previewed page must not be able to redirect the
-                // preview (or the whole session, via window.open) to the web.
-                core.NewWindowRequested += (_, args) => args.Handled = true;
-                core.NavigationStarting += (_, args) => {
-                    bool local = Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri)
-                        && uri.Scheme is "file" or "about" or "data";
-                    if (!local) {
-                        args.Cancel = true;
-                    }
-                };
-
-                // NavigationStarting only covers navigations. A previewed
-                // .html could still reach the network through a tracking
-                // pixel, a remote script or a fetch() — quietly telling
-                // someone which files this machine looks at. Scripts stay
-                // enabled because the built-in PDF viewer needs them, so the
-                // subresources are where the line gets drawn instead.
-                core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-                core.WebResourceRequested += (_, args) => {
-                    if (IsRemoteUri(args.Request.Uri)) {
-                        args.Response = core.Environment.CreateWebResourceResponse(
-                            null, 403, "Blocked", "");
-                    }
-                };
-                TellWebScheme();
+            if (WebPreview.CoreWebView2 is not { } core) {
+                throw new InvalidOperationException("WebView2 came up without its core");
             }
+
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.AreDevToolsEnabled = false;
+
+            // The pane renders untrusted local files (any .html the user
+            // clicks), so lock it down: no autofill surfaces, no host
+            // object / postMessage bridge into the app.
+            core.Settings.IsPasswordAutosaveEnabled = false;
+            core.Settings.IsGeneralAutofillEnabled = false;
+            core.Settings.AreHostObjectsAllowed = false;
+            core.Settings.IsWebMessageEnabled = false;
+
+            // No popups, and the pane itself may only display local
+            // content: a previewed page must not be able to redirect the
+            // preview (or the whole session, via window.open) to the web.
+            core.NewWindowRequested += (_, args) => args.Handled = true;
+            core.NavigationStarting += (_, args) => {
+                bool local = Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri)
+                    && uri.Scheme is "file" or "about" or "data";
+                if (!local) {
+                    args.Cancel = true;
+                }
+            };
+
+            // NavigationStarting only covers navigations. A previewed
+            // .html could still reach the network through a tracking
+            // pixel, a remote script or a fetch() — quietly telling
+            // someone which files this machine looks at. Scripts stay
+            // enabled because the built-in PDF viewer needs them, so the
+            // subresources are where the line gets drawn instead.
+            core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+            core.WebResourceRequested += (_, args) => {
+                if (IsRemoteUri(args.Request.Uri)) {
+                    args.Response = core.Environment.CreateWebResourceResponse(
+                        null, 403, "Blocked", "");
+                }
+            };
+            TellWebScheme();
             _webInitialized = true;
-        } catch {
-            // WebView2 runtime not installed — the pane will stay blank
-            // for PDF / HTML / Markdown previews. Other previews are unaffected.
+        } catch (Exception ex) {
+            // WebView2 runtime not installed, or a profile it cannot open —
+            // the pane stays blank for PDF / HTML / Markdown previews. Other
+            // previews are unaffected.
+            if (!_webFailureSaid) {
+                _webFailureSaid = true;
+                Log.Error("Preview: the browser did not start; PDF, HTML and Markdown show nothing this session", ex);
+            }
         }
+
+        return _webInitialized;
     }
+
+    // One ERROR a session for the browser not starting, whichever pane asked (EnsureWebViewReadyAsync).
+    private static bool _webFailureSaid;
 
 
     /// <summary>

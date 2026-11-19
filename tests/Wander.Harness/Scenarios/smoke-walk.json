@@ -59,6 +59,6 @@
     { "do": "command", "name": "permanent-delete" },
     { "do": "assert-entries", "absent": [ "renamed-by-harness" ], "count": 10 },
 
-    { "do": "assert-log", "scope": "all", "noErrors": true, "allow": [ "Permanent delete" ] }
+    { "do": "assert-log", "scope": "all", "noErrors": true }
   ]
 }

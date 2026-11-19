@@ -226,7 +226,7 @@ public sealed class BookmarksController {
         }
 
         foreach (var row in wanted) {
-            _ = ProbeAsync(row);
+            ProbeAsync(row).Forget(_log, "Probe");
         }
     }
 

@@ -95,7 +95,12 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
             _suspended = null;
             Stop();
 
-            if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) {
+            if (string.IsNullOrEmpty(path)) {
+                return;
+            }
+            if (!Directory.Exists(path)) {
+                _log.Info($"[watch] {path} is not there, not watched");
+
                 return;
             }
 
@@ -122,7 +127,11 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
         lock (_lock) {
             if (_suspended is { } path && IsOn(path, root) && _watcher is null) {
                 _suspended = null;
-                _watcher = Directory.Exists(path) ? Create(path) : null;
+                if (Directory.Exists(path)) {
+                    _watcher = Create(path);
+                } else {
+                    _log.Info($"[watch] {path} is not there any more, not watched");
+                }
             }
         }
     }
@@ -187,7 +196,17 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
     /// like any other and then puts the watcher back on its feet.
     /// </summary>
     private void OnError(object sender, ErrorEventArgs e) {
-        _log.Warn($"[watch] watcher error: {e.GetException().Message}");
+        // With the folder, and by whether it is still there: a watcher that
+        // lost its folder - moved or deleted while open, "access denied" -
+        // is expected and INFO; one that broke on a folder still there is
+        // the warning (audit 2026-11-18, L10).
+        string? watched = (sender as FileSystemWatcher)?.Path;
+        string line = $"[watch] watcher error on {watched}: {e.GetException().Message}";
+        if (watched is not null && Directory.Exists(watched)) {
+            _log.Warn(line);
+        } else {
+            _log.Info(line);
+        }
         Changed?.Invoke(this, DirectoryChange.Unknown);
 
         lock (_lock) {
@@ -199,7 +218,11 @@ public sealed class WindowsDirectoryWatcher : IDirectoryWatcher {
             // restart is done inline rather than by calling back into it.
             string path = _watcher.Path;
             Stop();
-            _watcher = Directory.Exists(path) ? Create(path) : null;
+            if (Directory.Exists(path)) {
+                _watcher = Create(path);
+            } else {
+                _log.Info($"[watch] {path} is gone, not watched");
+            }
         }
     }
 

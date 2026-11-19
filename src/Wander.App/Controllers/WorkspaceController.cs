@@ -116,13 +116,13 @@ public sealed class WorkspaceController {
                 _navigate(navigate.Path, navigate.Source);
                 break;
             case ReadBranch read:
-                _ = ReadAsync(read);
+                ReadAsync(read).Forget(_log, "Read");
                 break;
             case ProbeChevrons probe:
-                _ = ProbeAsync(probe);
+                ProbeAsync(probe).Forget(_log, "Probe");
                 break;
             case ProbeMissing probe:
-                _ = ProbeMissingAsync(probe);
+                ProbeMissingAsync(probe).Forget(_log, "ProbeMissing");
                 break;
             case ScheduleThrottle schedule:
                 Schedule(schedule.AtMs);

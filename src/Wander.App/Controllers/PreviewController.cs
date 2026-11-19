@@ -1585,7 +1585,7 @@ public sealed class PreviewController : ObservableObject {
             ColorOf(Palette.ReviewPeaking), ColorOf(Palette.ReviewUnder),
             ColorOf(Palette.ReviewAfFocused), ColorOf(Palette.ReviewAfOther),
             HistogramWidth, HistogramHeight);
-        _ = RecomputeHelpersAsync(fit, full, request, _helpersCache, _helpersCts.Token);
+        RecomputeHelpersAsync(fit, full, request, _helpersCache, _helpersCts.Token).Forget(Log.Current, "RecomputeHelpers");
     }
 
     private async Task RecomputeHelpersAsync(
@@ -1775,7 +1775,7 @@ public sealed class PreviewController : ObservableObject {
         }
 
         _boxCts = new CancellationTokenSource();
-        _ = RefitWhenSettledAsync(_boxCts.Token);
+        RefitWhenSettledAsync(_boxCts.Token).Forget(Log.Current, "RefitWhenSettled");
 
         async Task RefitWhenSettledAsync(CancellationToken ct) {
             try {
@@ -2007,7 +2007,7 @@ public sealed class PreviewController : ObservableObject {
         _previewCts?.Cancel();
         _previewCts = new CancellationTokenSource();
         _releasedPath = null;
-        _ = UpdatePreviewAsync(_previewCts.Token);
+        UpdatePreviewAsync(_previewCts.Token).Forget(Log.Current, "UpdatePreview");
     }
 
     /// <summary>
@@ -2119,7 +2119,7 @@ public sealed class PreviewController : ObservableObject {
         }
 
         bool finished = false;
-        _ = RaiseVeilWhenSlowAsync();
+        RaiseVeilWhenSlowAsync().Forget(Log.Current, "RaiseVeilWhenSlow");
         string path = _primary.FullPath;
         try {
 
@@ -2163,18 +2163,30 @@ public sealed class PreviewController : ObservableObject {
             // target is previewed in its place — with the footer saying
             // whose content is on screen and offering the way over.
             if (PreviewRouter.Route(path) is PreviewRoute.Shortcut) {
-                string? resolved = ResolveShortcut(path);
+                // Asked on the pool, the shortcut read and its target looked
+                // for: a target on a share that is not there - or the
+                // shortcut itself on one that dropped - held the window for
+                // seconds on an arrow key (audit 2026-11-18, P5).
+                var (resolved, isFolder, isFile) = await Task.Run(() => {
+                    string? target = ResolveShortcut(path);
+                    if (target is null) {
+                        return ((string?)null, false, false);
+                    }
+
+                    return Directory.Exists(target) ? (target, true, false) : (target, false, File.Exists(target));
+                }, ct);
+                ct.ThrowIfCancellationRequested();
                 if (resolved is null) {
                     Kind = PreviewKind.Unsupported;
                     return;
                 }
 
                 LinkTarget = resolved;
-                if (Directory.Exists(resolved)) {
+                if (isFolder) {
                     await ShowFolderCensusAsync(resolved, ct);
                     return;
                 }
-                if (!File.Exists(resolved)) {
+                if (!isFile) {
                     // A shortcut whose target has been moved or deleted.
                     // Worth saying in those words: "no preview for this
                     // file" would blame the wrong file.
@@ -3223,7 +3235,7 @@ public sealed class PreviewController : ObservableObject {
         // archive entry's scratch copy are paths inside the archive, which
         // nothing on disk answers to.
         if (key is not null) {
-            _ = DecodeNeighborsAsync(ct);
+            DecodeNeighborsAsync(ct).Forget(Log.Current, "DecodeNeighbors");
         }
     }
 
@@ -3255,9 +3267,9 @@ public sealed class PreviewController : ObservableObject {
         Kind = PreviewKind.Image;
         ScheduleHelpers();
         if (decode) {
-            _ = LoadRawDecodeAsync(path, picture.Meta?.Orientation, picture.Fit, ct);
+            LoadRawDecodeAsync(path, picture.Meta?.Orientation, picture.Fit, ct).Forget(Log.Current, "LoadRawDecode");
         } else if (bigger || whole) {
-            _ = LoadFullSizeAsync(path, picture, bigger, ct);
+            LoadFullSizeAsync(path, picture, bigger, ct).Forget(Log.Current, "LoadFullSize");
         }
     }
 
@@ -3512,7 +3524,7 @@ public sealed class PreviewController : ObservableObject {
         CanCheckSignature = !known && !byItself;
         Kind = PreviewKind.Executable;
         if (!known && byItself) {
-            _ = CheckSignatureAsync(reader, path, info, dwell: true, ct);
+            CheckSignatureAsync(reader, path, info, dwell: true, ct).Forget(Log.Current, "CheckSignature");
         }
     }
 
@@ -3525,7 +3537,7 @@ public sealed class PreviewController : ObservableObject {
 
         CanCheckSignature = false;
         ExecutableFacts = ExecutableCard.Facts(info, Strings.PreviewExeSignatureChecking);
-        _ = CheckSignatureAsync(reader, path, info, dwell: false, _previewCts?.Token ?? CancellationToken.None);
+        CheckSignatureAsync(reader, path, info, dwell: false, _previewCts?.Token ?? CancellationToken.None).Forget(Log.Current, "CheckSignature");
     }
 
     /// <summary>
@@ -3937,7 +3949,7 @@ public sealed class PreviewController : ObservableObject {
     private void ScheduleCompanionUpdate() {
         _companionCts?.Cancel();
         _companionCts = new CancellationTokenSource();
-        _ = UpdateCompanionsAsync(_companionCts.Token);
+        UpdateCompanionsAsync(_companionCts.Token).Forget(Log.Current, "UpdateCompanions");
     }
 
     private async Task UpdateCompanionsAsync(CancellationToken ct) {
@@ -4196,6 +4208,8 @@ public sealed class PreviewController : ObservableObject {
     }
 
     private async Task ShowFolderCensusAsync(string folder, CancellationToken ct) {
+        var volume = await DescribeVolumeAsync(folder, ct);
+        ct.ThrowIfCancellationRequested();
         _censusFolder = folder;
         FolderTitle = CensusTitle(folder);
         // Blank rather than "counting": the spinner below says that, and
@@ -4204,7 +4218,7 @@ public sealed class PreviewController : ObservableObject {
         FolderHeadline = "";
         FolderNote = "";
         ClearCensusRows();
-        SetVolume(DescribeVolume(folder));
+        SetVolume(volume);
         Kind = PreviewKind.Folder;
         // A subfolder selected and then nothing: the kind is the same, the switches are not.
         Raise(nameof(ShowsHelperSwitches));
@@ -4308,13 +4322,17 @@ public sealed class PreviewController : ObservableObject {
     /// The volume behind a folder, but only when the folder <em>is</em> the
     /// volume. A drive's capacity above the census of C:\Users would be
     /// answering about the disk while showing numbers about a folder.
+    /// Whether it is one is a comparison of strings and stays on this
+    /// thread - an ordinary folder waits for nothing; what the volume is
+    /// asks the drive (an empty DVD, a dropped network letter: seconds) and
+    /// is asked on the pool (audit 2026-11-18, P5).
     /// </summary>
-    private static VolumeInfo? DescribeVolume(string folder) {
-        if (ServiceLocator.TryGet<IVolumeInfoProvider>() is not { } volumes) {
-            return null;
+    private static Task<VolumeInfo?> DescribeVolumeAsync(string folder, CancellationToken ct) {
+        if (ServiceLocator.TryGet<IVolumeInfoProvider>() is not { } volumes || !volumes.IsVolumeRoot(folder)) {
+            return Task.FromResult<VolumeInfo?>(null);
         }
 
-        return volumes.IsVolumeRoot(folder) ? volumes.Describe(folder) : null;
+        return Task.Run(() => volumes.Describe(folder), ct);
     }
 
     private void SetVolume(VolumeInfo? volume) {
@@ -4357,7 +4375,7 @@ public sealed class PreviewController : ObservableObject {
     private void ScheduleSummaryUpdate() {
         _summaryCts?.Cancel();
         _summaryCts = new CancellationTokenSource();
-        _ = UpdateSummaryAsync(_summaryCts.Token);
+        UpdateSummaryAsync(_summaryCts.Token).Forget(Log.Current, "UpdateSummary");
     }
 
     /// <summary>

@@ -199,7 +199,7 @@
       // The failed extraction out of the encrypted zip is the one error
       // this scenario provokes, and it is named rather than tolerated.
       "do": "assert-log", "scope": "all", "noErrors": true,
-      "allow": [ "Extract failed", "Permanent delete" ]
+      "allow": [ "Extract failed" ]
     }
   ]
 }

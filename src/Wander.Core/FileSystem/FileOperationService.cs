@@ -148,7 +148,8 @@ public sealed class FileOperationService {
         } else {
             throw new FileNotFoundException("Path not found", path);
         }
-        _log.Warn($"Permanent delete: {path}");
+        // An audit line, not a warning (audit 2026-11-18, L11).
+        _log.Info($"Permanent delete: {path}");
         _undo.Forget(new[] { path });
     }
 

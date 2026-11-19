@@ -441,8 +441,9 @@ Debug из Rider делят `%LOCALAPPDATA%\Wander` — так задумано.
 тест; текущий лог и чужие файлы не трогаются). Повторы `WARN` / `ERROR`
 схлопывает `Core/Logging/RepeatCollapser` (подпись — уровень, сообщение,
 тип и первый кадр исключения): та же подпись в течение 5 с считается,
-итог «`ERROR repeated N times over M s: …`»; `INFO` не схлопывается —
-хронология. Долгие фоновые ожидания называет
+итог «`ERROR repeated N times over M s, last at HH:mm:ss: …`» (время
+последнего повтора — местное: итог уходит со следующей строкой, хоть
+через часы); `INFO` не схлопывается — хронология. Долгие фоновые ожидания называет
 `Core/Diagnostics/LongWait.WatchAsync` (тест): `SLOW wait: …` / `SLOW
 done: …` — листинг архива, уровень панели, панель просмотра, распаковка.
 
@@ -457,6 +458,24 @@ done: …` — листинг архива, уровень панели, пан�
 строки в последних 64 КБ — WARN `Previous session ended without a word`
 с pid из имени и временем по mtime; pid жив и это Wander (второй
 экземпляр) — молчит.
+
+**Уровни** (аудит 2026-11-18): WARN — то, на что стоит посмотреть;
+штатное — INFO: `Permanent delete` (по файлу и итог пачки), ошибка сторожа
+папки, которой больше нет (есть — WARN; строка с путём). Брошенная задача
+(`_ = …Async()` в `MainViewModel` и `Controllers`) — через
+`Core/Logging/TaskForget.Forget(log, what)`: сбой — ERROR со стеком и
+именем сразу, отмена — молча; методы, ловящие `Exception` на всём теле, и
+`Controls/*`, `_ = Task.Run` — без него. Сбой извлечения поиска —
+`Core/Logging/StackOnce`: стек раз на извлекатель и вид сбоя, COM, IO и
+отказ доступа — только сообщение (общее правило — BACKLOG «Умный лог»).
+
+**Пульс и зависание.** `Diagnostics/UiStallWatch` пингует диспетчер раз в
+200 мс всегда, ответ ждёт срезами: молчание UI — `WARN UI not responding for
+N s` и `SYS` на 2, 5, 10 с, дальше раз в 10 с, при любом состоянии окна
+(`Core/Diagnostics/UiWatchRules`, тест). Wander активен — любое его окно
+(`Application.Activated` / `Deactivated`, поле `MainWindow`, сторожу —
+`Func<bool>`; `Headless` — всегда активен): `PERF ui.stall` от 150 мс с замером `SYS`, пульс `SYS` раз
+в 5 с; неактивно — `ui.stall` не пишется, пульс раз в 60 с.
 
 **Журнал действий** — `Core/Logging/ActionJournal`: что видел
 пользователь, словами статус-бара; кнопка в статус-баре открывает
@@ -493,13 +512,19 @@ Claude — устаревшая копия (виртуализация AppData);
 обращения раз в 64 записи и при уменьшении лимита, до 80 % бюджета, в
 фоне; лимиты — `IIconProvider.ConfigureCache(ThumbnailCacheOptions)`.
 
-**`crashes\*.zip`** — `CrashReporter`; `App.HookCrashLogging`:
+**`crashes\*.zip`** — `CrashReporter`; `App.HookCrashLogging` — первым
+в `OnStartup`, до `RegisterDefaults`; обработчики берут `Log.Current` в
+момент записи. Сбой бутстрапа (всё до `base.OnStartup`) — ERROR и
+`Session end: fatal`, если логгер уже есть, `MessageBox` (до настроек — по
+культуре ОС; под `Headless` — без него) и код выхода 1.
 `DispatcherUnhandledException` — ответ `Core/Diagnostics/UiFault.Answer`
 (тест): на выходе (`App.IsShuttingDown` или `Dispatcher.HasShutdownStarted`)
 — ERROR, `StopOperationsBeforeDying`, `exit-crash`, `Environment.Exit(1)`,
 без репорта: проглоченный сбой оставлял процесс без окна на часы; под
 `Headless` — `ShutdownWithoutAsking(1)`; иначе — лог + репорт, `Handled = true`;
-`AppDomain.UnhandledException` (флаш, `fatal`); `TaskScheduler.UnobservedTaskException`.
+`AppDomain.UnhandledException` (флаш, `fatal`; окно репорта — `InvokeAsync`
+на UI-поток: не начал за 3 с — WARN и выход без окна, начал — ответ
+человека без срока); `TaskScheduler.UnobservedTaskException`.
 Репорт — заготовка GitHub issue + локальный zip; **ничего не уходит без
 действия пользователя**; на ту же ошибку — не чаще раза в минуту
 (`App.ShouldOffer`); под `--smoke` выключен.

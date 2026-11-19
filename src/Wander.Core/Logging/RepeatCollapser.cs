@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Wander.Core.Logging;
 
 /// <summary>
@@ -102,7 +104,7 @@ public sealed class RepeatCollapser {
             return null;
         }
 
-        var summary = new Summary(_repeats, untilUtc - _runStartUtc);
+        var summary = new Summary(_repeats, untilUtc - _runStartUtc, _lastUtc);
         _repeats = 0;
 
         return summary;
@@ -112,15 +114,19 @@ public sealed class RepeatCollapser {
     /// <summary>One decision: write the incoming line or not, summary or not.</summary>
     public readonly record struct Decision(bool Write, Summary? Repeats);
 
-    /// <summary>How many repeats were swallowed, and over how long.</summary>
-    public readonly record struct Summary(int Count, TimeSpan Span) {
+    /// <summary>How many repeats were swallowed, over how long, and when the last of them came.</summary>
+    public readonly record struct Summary(int Count, TimeSpan Span, DateTime LastUtc) {
         /// <summary>
         /// The line the log gets in their place; the logger appends the
         /// message the run was about, since lines of other levels may have
         /// been written in between. English, like every other line the
         /// logger writes itself - the log is a diagnostic, not user-facing
-        /// text.
+        /// text. The time of the last repeat is local, like the stamps of
+        /// the lines: a summary goes out with the next line, which may come
+        /// hours later, under that line's stamp (audit L4).
         /// </summary>
-        public string Line => $"repeated {Count} times over {(int)Math.Round(Span.TotalSeconds)} s";
+        public string Line => string.Create(
+            CultureInfo.InvariantCulture,
+            $"repeated {Count} times over {(int)Math.Round(Span.TotalSeconds)} s, last at {LastUtc.ToLocalTime():HH:mm:ss}");
     }
 }

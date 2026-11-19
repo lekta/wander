@@ -467,7 +467,7 @@ public sealed class ContentSearchController : ObservableObject {
             name, _textQuery, root, _scope, _searchBinaries, _visibility()) { Type = _type };
 
         Started?.Invoke();
-        _ = RunAsync(request, token, generation);
+        RunAsync(request, token, generation).Forget(_log, "Run");
     }
 
 

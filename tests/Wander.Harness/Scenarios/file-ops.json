@@ -140,12 +140,11 @@
     { "do": "note", "text": "a permanent delete left the unrelated rename in the undo history" },
 
     {
-      // Three failures are the point of this scenario, so they are named
+      // The failures are the point of this scenario, so they are named
       // rather than tolerated: the delete that had to fail on a locked
-      // file, the bin's refusal of an over-long path, and the audit line
-      // every permanent delete writes.
+      // file, the bin's refusal of an over-long path, the copy that failed.
       "do": "assert-log", "scope": "all", "noErrors": true,
-      "allow": [ "Delete failed", "Recycle refused", "Permanent delete", "Copy failed" ]
+      "allow": [ "Delete failed", "Recycle refused", "Copy failed" ]
     }
   ]
 }

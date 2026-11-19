@@ -86,47 +86,59 @@ public partial class App : Application {
         // came up on the real desktop and took the focus off whoever was
         // working there.
         Headless |= IsSmokeRun;
-        // Where state.json, logs and caches live - decided before the
-        // logger opens its file, since the logger is the first thing the
-        // bootstrapper builds.
-        AppPaths.Resolve(e.Args);
-        // The folder to start in, when the command line names one - a test
-        // run does, to list a folder of its own.
-        StartFolder.Resolve(e.Args);
-        // Before anything formats a number, and before the thread pool has
-        // been handed any work that might: the culture set here is the one
-        // background passes inherit.
-        NumberFormat.Install();
-        PlatformBootstrapper.RegisterDefaults();
-        // The interface language, read from the settings before the first
-        // string is: every window takes its text when it is built. The
-        // theme before the first window too, so none starts light and turns.
-        var settings = ServiceLocator.Get<IAppStateStore>().Load().Settings;
-        InterfaceLanguage.Apply(settings.Language);
-        InterfaceTheme.Apply(settings.Theme);
-        // The string table lives in this assembly, so Core cannot reach it
-        // directly. Registering the source here — before anything builds a
-        // menu — is what makes ContextMenuCatalog and PathSafety speak the
-        // interface language instead of returning resource keys.
-        ServiceLocator.Register<ITextSource>(new AppTextSource());
-        // Every modal question goes through this seam; the harness swaps
-        // in a scripted answerer before it builds the view model.
-        ServiceLocator.Register<IDialogs>(new WpfDialogs());
-        // The compare window, for the conflict window's pairs.
-        ServiceLocator.Register<Conflict.IPairViewer>(new Views.CompareWindow.Viewer());
+        // First: a fault anywhere below is a line in the log - when there is
+        // one - and a message, not a process that is simply gone (audit
+        // 2026-11-18, P7). The handlers find the logger when they write -
+        // before the bootstrap there is none.
         HookCrashLogging();
-        // WPF answers an unrefused session end with Shutdown.
-        SessionEnding += (_, _) => {
-            IsShuttingDown = true;
-            _endReason = SessionEnd.SessionEnding;
-        };
-        WatchWindowsWhenHeadless();
-        // Yesterday's scratch copies of archive entries. Swept on the way in
-        // rather than on the way out: a crash is precisely when the tidy-up
-        // on exit would not have run.
-        SweepTempCopies();
-        WarnIfLastSessionDied();
-        SweepLogs();
+        try {
+            // Where state.json, logs and caches live - decided before the
+            // logger opens its file, since the logger is the first thing the
+            // bootstrapper builds.
+            AppPaths.Resolve(e.Args);
+            // The folder to start in, when the command line names one - a test
+            // run does, to list a folder of its own.
+            StartFolder.Resolve(e.Args);
+            // Before anything formats a number, and before the thread pool has
+            // been handed any work that might: the culture set here is the one
+            // background passes inherit.
+            NumberFormat.Install();
+            PlatformBootstrapper.RegisterDefaults();
+            // The interface language, read from the settings before the first
+            // string is: every window takes its text when it is built. The
+            // theme before the first window too, so none starts light and turns.
+            var settings = ServiceLocator.Get<IAppStateStore>().Load().Settings;
+            InterfaceLanguage.Apply(settings.Language);
+            InterfaceTheme.Apply(settings.Theme);
+            // The string table lives in this assembly, so Core cannot reach it
+            // directly. Registering the source here — before anything builds a
+            // menu — is what makes ContextMenuCatalog and PathSafety speak the
+            // interface language instead of returning resource keys.
+            ServiceLocator.Register<ITextSource>(new AppTextSource());
+            // Every modal question goes through this seam; the harness swaps
+            // in a scripted answerer before it builds the view model.
+            ServiceLocator.Register<IDialogs>(new WpfDialogs());
+            // The compare window, for the conflict window's pairs.
+            ServiceLocator.Register<Conflict.IPairViewer>(new Views.CompareWindow.Viewer());
+            // WPF answers an unrefused session end with Shutdown.
+            SessionEnding += (_, _) => {
+                IsShuttingDown = true;
+                _endReason = SessionEnd.SessionEnding;
+            };
+            WatchWindowsWhenHeadless();
+            // Yesterday's scratch copies of archive entries. Swept on the way in
+            // rather than on the way out: a crash is precisely when the tidy-up
+            // on exit would not have run.
+            SweepTempCopies();
+            WarnIfLastSessionDied();
+            SweepLogs();
+        } catch (Exception ex) {
+            // Anywhere in the bootstrap, not only before the log: a fault
+            // here went to the dispatcher's handler, which answers "offer a
+            // report and go on" - and with no window yet, went on as a
+            // process with nothing on screen.
+            DieOnStartup(ex);
+        }
         base.OnStartup(e);
     }
 
@@ -407,15 +419,39 @@ public partial class App : Application {
     /// running. Blocking, and nothing goes through the dispatcher - it may
     /// be the thing that died.
     /// </summary>
-    private static void StopOperationsBeforeDying(ILogger log) {
+    private static void StopOperationsBeforeDying() {
         try {
             AbandonOperations();
-            if (!ServiceLocator.Get<OperationTracker>().WhenIdleAsync(_crashWait).Result) {
-                log.Warn($"Crash: operation(s) still running after {_crashWait.TotalSeconds:F0} s");
+            // TryGet: a fault before the bootstrap has no tracker yet.
+            if (ServiceLocator.TryGet<OperationTracker>() is { } tracker && !tracker.WhenIdleAsync(_crashWait).Result) {
+                Log.Current.Warn($"Crash: operation(s) still running after {_crashWait.TotalSeconds:F0} s");
             }
         } catch (Exception ex) {
-            log.Error("Crash: stopping the operations failed", ex);
+            Log.Current.Error("Crash: stopping the operations failed", ex);
         }
+    }
+
+
+    /// <summary>
+    /// The bootstrap failed - before the log was open, or after: the log
+    /// has the line when it got that far, and the session its end; the
+    /// person gets a message box - in the system's language when the
+    /// settings were not read yet - and a smoke run the exit code alone,
+    /// nobody is there to dismiss a box.
+    /// </summary>
+    private static void DieOnStartup(Exception ex) {
+        Log.Current.Error("Startup failed", ex);
+        EndSession(SessionEnd.Fatal, 1);
+        if (!Headless) {
+            try {
+                MessageBox.Show(
+                    string.Format(Strings.CrashStartupFailed, ex.GetType().Name, ex.Message),
+                    Strings.CrashTitle, MessageBoxButton.OK, MessageBoxImage.Error);
+            } catch {
+                // Not even a message box: the exit code is what is left.
+            }
+        }
+        Environment.Exit(1);
     }
 
 
@@ -426,17 +462,17 @@ public partial class App : Application {
     /// the whole process down.
     /// </summary>
     private void HookCrashLogging() {
-        var log = Log.Current;
-
+        // Log.Current at the moment of writing, never kept: the hooks go on
+        // before the bootstrap, when there is no logger yet.
         DispatcherUnhandledException += (_, args) => {
-            log.Error("Unhandled dispatcher exception", args.Exception);
+            Log.Current.Error("Unhandled dispatcher exception", args.Exception);
             switch (UiFault.Answer(IsShuttingDown, Dispatcher.HasShutdownStarted, Headless)) {
                 case UiFaultAnswer.Exit:
                     // On the way out: swallowed, it left a process with no
                     // window for hours (audit L3). No report - the window
                     // is gone; the log has the stack.
                     args.Handled = true;
-                    StopOperationsBeforeDying(log);
+                    StopOperationsBeforeDying();
                     EndSession(SessionEnd.ExitCrash, 1);
                     Environment.Exit(1);
 
@@ -447,7 +483,7 @@ public partial class App : Application {
                     // and a check that hangs on a message box is worse than
                     // one that fails. The exit code carries the news instead.
                     args.Handled = true;
-                    StopOperationsBeforeDying(log);
+                    StopOperationsBeforeDying();
                     _endReason = SessionEnd.Fatal;
                     ShutdownWithoutAsking(1);
 
@@ -466,8 +502,8 @@ public partial class App : Application {
         AppDomain.CurrentDomain.UnhandledException += (_, args) => {
             // Process is going down — flush what we know while we still can.
             var ex = args.ExceptionObject as Exception;
-            log.Error($"Fatal unhandled exception (terminating={args.IsTerminating})", ex);
-            StopOperationsBeforeDying(log);
+            Log.Current.Error($"Fatal unhandled exception (terminating={args.IsTerminating})", ex);
+            StopOperationsBeforeDying();
             EndSession(SessionEnd.Fatal, UnhandledExceptionExitCode);
             if (ex is not null && !Headless) {
                 CrashReporter.Offer(ex, fatal: true);
@@ -475,7 +511,7 @@ public partial class App : Application {
         };
 
         TaskScheduler.UnobservedTaskException += (_, args) => {
-            log.Error("Unobserved task exception", args.Exception);
+            Log.Current.Error("Unobserved task exception", args.Exception);
             args.SetObserved();
         };
     }

@@ -153,7 +153,7 @@ public sealed class SharpnessController {
 
         _asked[entry.FullPath] = stamp;
         _pass ??= new CancellationTokenSource();
-        _ = ScoreAsync(entry, _pass.Token);
+        ScoreAsync(entry, _pass.Token).Forget(_log, "Score");
     }
 
 

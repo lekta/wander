@@ -236,6 +236,9 @@ public static partial class Strings {
     /// <summary>В Wander произошла неожиданная ошибка.</summary>
     public static string CrashNonFatal => Get(nameof(CrashNonFatal));
 
+    /// <summary>Wander не запустился.  {0}: {1}</summary>
+    public static string CrashStartupFailed => Get(nameof(CrashStartupFailed));
+
     /// <summary>В Wander произошла неожиданная ошибка.  {0}: {1}  Подгото…</summary>
     public static string CrashFallbackPrompt => Get(nameof(CrashFallbackPrompt));
 

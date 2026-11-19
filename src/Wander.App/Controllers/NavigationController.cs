@@ -177,7 +177,7 @@ public sealed class NavigationController : ObservableObject {
     /// </summary>
     public void NavigateTo(string path, NavigationSource source = NavigationSource.External) {
         if (source == NavigationSource.Address) {
-            _ = NavigateWhenValidAsync(path, source);
+            NavigateWhenValidAsync(path, source).Forget(_log, "NavigateWhenValid");
 
             return;
         }

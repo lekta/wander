@@ -122,6 +122,11 @@ public sealed class FolderSession {
 
     private string? _listedPath;
 
+    // The folder the latest listing is reading - known from its start, not
+    // its landing: the watcher's changes are about this one (audit
+    // 2026-11-18, P2).
+    private string? _listingPath;
+
     // What to select once the pending listing lands — one slot, because it
     // is one question. Set by whoever knows better than "whatever was
     // selected before": a rename knows the new name, an undo knows what it
@@ -178,9 +183,19 @@ public sealed class FolderSession {
         if (arriving) {
             _listedPath = null;
         }
+        // Another folder: what the watcher noted about the one before - its
+        // renames included - answers nothing here.
+        if (!IsSameFolder(path, _listingPath)) {
+            _pendingChanges.Clear();
+        }
+        _listingPath = path;
 
         return ++_epoch;
     }
+
+
+    /// <summary>The epoch of the latest listing - for a pass that starts now and lands later (<see cref="IsCurrent"/>).</summary>
+    public int Epoch => _epoch;
 
 
     /// <summary>
@@ -209,9 +224,22 @@ public sealed class FolderSession {
     }
 
 
-    /// <summary>The folder is gone, unreadable, or there is no folder — no rows belong to anything.</summary>
-    public void NoteListingGone() {
+    /// <summary>
+    /// The listing of <paramref name="epoch"/> found its folder gone or
+    /// unreadable, or there is no folder: no rows belong to anything. A
+    /// listing overtaken since - left for another folder, listed again -
+    /// answers about nothing on screen and changes nothing (audit
+    /// 2026-11-18, P1).
+    /// </summary>
+    /// <returns>True when taken; false when the answer is stale and is to be dropped.</returns>
+    public bool NoteListingGone(int epoch) {
+        if (!IsCurrent(epoch)) {
+            return false;
+        }
+
         _listedPath = null;
+
+        return true;
     }
 
 
@@ -252,6 +280,7 @@ public sealed class FolderSession {
     /// </summary>
     public void RewriteMemory(string from, string to) {
         _listedPath = Moved(_listedPath, from, to);
+        _listingPath = Moved(_listingPath, from, to);
         if (_arrival is { } pending) {
             _arrival = pending with {
                 ForFolder = Moved(pending.ForFolder, from, to),
@@ -448,8 +477,19 @@ public sealed class FolderSession {
 
     // --- Folder watcher ---------------------------------------------------
 
-    /// <summary>The watcher saw something. Collected until the throttle asks <see cref="DecideWatchTick"/>.</summary>
+    /// <summary>
+    /// The watcher saw something. Collected until the throttle asks
+    /// <see cref="DecideWatchTick"/> - when it is about the folder being
+    /// listed: an event of the folder left, still on its way when the
+    /// watcher moved on, is dropped. The watcher losing track
+    /// (<see cref="DirectoryChange.Unknown"/>) names no place and is always
+    /// taken (audit 2026-11-18, P2).
+    /// </summary>
     public void NoteChange(DirectoryChange change) {
+        if (change.Path.Length > 0 && !IsSameFolder(Path.GetDirectoryName(change.Path), _listingPath)) {
+            return;
+        }
+
         _pendingChanges.Note(change);
     }
 
@@ -518,6 +558,15 @@ public sealed class FolderSession {
 
     private static bool IsSamePath(string? a, string? b) {
         return a is not null && b is not null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary><see cref="IsSamePath"/> with a trailing separator or not - a drive's root is <c>D:\</c> one way and <c>D:</c> the other.</summary>
+    private static bool IsSameFolder(string? a, string? b) {
+        return a is not null && b is not null
+            && string.Equals(
+                a.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                b.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? Moved(string? path, string from, string to) {

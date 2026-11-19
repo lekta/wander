@@ -7,6 +7,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Wander.App.Resources;
 using Wander.App.Util;
 using Wander.Core;
@@ -107,7 +108,7 @@ public static class CrashReporter {
         try {
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher is not null && !dispatcher.CheckAccess()) {
-                return dispatcher.Invoke(() => ShowOfferDialog(ex, fatal));
+                return OfferOnTheWindowsThread(dispatcher, ex, fatal);
             }
             return ShowOfferDialog(ex, fatal);
         } catch {
@@ -123,6 +124,31 @@ public static class CrashReporter {
             return (choice == MessageBoxResult.Yes, false);
         }
     }
+
+    /// <summary>
+    /// The offer from a dying worker thread: the window's thread has to
+    /// draw it, and may itself be the thing that is stuck - a plain Invoke
+    /// waited on it for ever, and the process that was dying did not die
+    /// (audit 2026-11-18, P8). It gets <see cref="_uiAnswerWait"/> to start
+    /// on the dialog; started, the person's answer is waited for as long as
+    /// it takes.
+    /// </summary>
+    private static (bool Send, bool IncludeLog) OfferOnTheWindowsThread(Dispatcher dispatcher, Exception ex, bool fatal) {
+        using var started = new ManualResetEventSlim();
+        var offer = dispatcher.InvokeAsync(() => {
+            started.Set();
+            return ShowOfferDialog(ex, fatal);
+        }, DispatcherPriority.Send);
+        if (!started.Wait(_uiAnswerWait) && offer.Abort()) {
+            Log.Current.Warn($"Crash: the window did not answer in {_uiAnswerWait.TotalSeconds:F0} s, no report offered");
+
+            return (false, false);
+        }
+
+        return offer.Task.GetAwaiter().GetResult();
+    }
+
+    private static readonly TimeSpan _uiAnswerWait = TimeSpan.FromSeconds(3);
 
     private static (bool Send, bool IncludeLog) ShowOfferDialog(Exception ex, bool fatal) {
         var window = new Window {

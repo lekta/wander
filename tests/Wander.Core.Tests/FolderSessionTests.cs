@@ -26,6 +26,14 @@ public class FolderSessionTests {
             Companions: companions.Length == 0 ? null : companions.Select(c => @"C:\folder\" + c).ToArray());
     }
 
+    /// <summary>A session listing C:\folder - the folder the watcher's changes are about.</summary>
+    private static FolderSession Watching() {
+        var session = new FolderSession();
+        session.BeginListing(@"C:\folder", out _);
+
+        return session;
+    }
+
     private static string[] Paths(params string[] names) {
         return names.Select(n => @"C:\folder\" + n).ToArray();
     }
@@ -68,6 +76,31 @@ public class FolderSessionTests {
         session.InvalidateListings();
 
         Assert.False(session.IsCurrent(listing));
+    }
+
+    /// <summary>Audit 2026-11-18, P1: a listing overtaken by the next folder fails late - the folder now on screen keeps its rows.</summary>
+    [Fact]
+    public void ALateFailureOfAnOvertakenListing_ChangesNothing() {
+        var session = new FolderSession();
+        int slow = session.BeginListing(@"\\server\share", out _);
+        session.BeginListing(@"C:\next", out _);
+        session.NoteListed(@"C:\next");
+
+        Assert.False(session.NoteListingGone(slow));
+        Assert.Equal(@"C:\next", session.ListedPath);
+    }
+
+    /// <summary>Audit 2026-11-18, P1: the current listing failing - its folder is gone - leaves no rows belonging to anything.</summary>
+    [Fact]
+    public void TheCurrentListingFailing_IsTaken() {
+        var session = new FolderSession();
+        session.BeginListing(@"C:\folder", out _);
+        session.NoteListed(@"C:\folder");
+        int again = session.BeginListing(@"C:\folder", out _);
+
+        Assert.True(session.NoteListingGone(again));
+        Assert.Null(session.ListedPath);
+        Assert.Equal(again, session.Epoch);
     }
 
     [Fact]
@@ -501,7 +534,7 @@ public class FolderSessionTests {
     public void MetadataChange_RefreshesTheRow_NotTheFolder() {
         // The project rule made testable: a sidecar written beside a photo
         // must not cost the folder its rows.
-        var session = new FolderSession();
+        var session = Watching();
         var photo = Row("IMG_1.CR3", "IMG_1.CR3.pp3");
         session.NoteChange(new DirectoryChange(@"C:\folder\IMG_1.CR3.pp3", Structural: false));
 
@@ -513,7 +546,7 @@ public class FolderSessionTests {
 
     [Fact]
     public void CompositionChange_Relists_AndTellsTheTrees() {
-        var session = new FolderSession();
+        var session = Watching();
         session.NoteChange(new DirectoryChange(@"C:\folder\new.txt", Structural: true));
 
         var decision = session.DecideWatchTick(busy: false, rows: Array.Empty<FileSystemEntry>());
@@ -528,7 +561,7 @@ public class FolderSessionTests {
         // listing is rebuilt, but the path is the same one - so whatever is
         // cached against that path has to be named, or the tile goes on
         // showing the picture that was deleted.
-        var session = new FolderSession();
+        var session = Watching();
         session.NoteChange(new DirectoryChange(@"C:\folder\photo.jpg", Structural: true));
 
         var decision = session.DecideWatchTick(busy: false, rows: Array.Empty<FileSystemEntry>());
@@ -539,7 +572,7 @@ public class FolderSessionTests {
 
     [Fact]
     public void AnEditedFile_IsReportedStale_AlongsideItsRowRefresh() {
-        var session = new FolderSession();
+        var session = Watching();
         var photo = Row("IMG_1.CR3");
         session.NoteChange(new DirectoryChange(@"C:\folder\IMG_1.CR3", Structural: false));
 
@@ -551,7 +584,7 @@ public class FolderSessionTests {
 
     [Fact]
     public void AQuietTick_NamesNothingStale() {
-        var session = new FolderSession();
+        var session = Watching();
 
         Assert.Null(session.DecideWatchTick(busy: false, rows: Array.Empty<FileSystemEntry>()).Stale);
     }
@@ -560,7 +593,7 @@ public class FolderSessionTests {
     public void AChangedFileNobodyShows_Relists_WithoutBotheringTheTrees() {
         // The listing does not know the file; only a fresh listing can say
         // what it is. Nothing says the panels are affected.
-        var session = new FolderSession();
+        var session = Watching();
         session.NoteChange(new DirectoryChange(@"C:\folder\unknown.tmp", Structural: false));
 
         var decision = session.DecideWatchTick(busy: false, rows: new[] { Row("a.txt") });
@@ -573,7 +606,7 @@ public class FolderSessionTests {
     public void ABusyTick_HoldsTheChanges_AndALaterTickAnswersThem() {
         // A rename editor or our own operation postpones the answer; it
         // must not eat it.
-        var session = new FolderSession();
+        var session = Watching();
         var rows = new[] { Row("a.txt") };
         session.NoteChange(new DirectoryChange(@"C:\folder\a.txt", Structural: false));
 
@@ -583,7 +616,7 @@ public class FolderSessionTests {
 
     [Fact]
     public void AnsweredChanges_AreNotAnsweredTwice() {
-        var session = new FolderSession();
+        var session = Watching();
         var rows = new[] { Row("a.txt") };
         session.NoteChange(new DirectoryChange(@"C:\folder\a.txt", Structural: false));
 
@@ -594,7 +627,7 @@ public class FolderSessionTests {
 
     [Fact]
     public void AnUnwatchedFolder_ForgetsItsPendingChanges() {
-        var session = new FolderSession();
+        var session = Watching();
         session.NoteChange(new DirectoryChange(@"C:\folder\a.txt", Structural: false));
 
         session.ForgetPendingChanges();
@@ -607,7 +640,7 @@ public class FolderSessionTests {
     /// <summary>L-5, decision B7: a rename another program made is handed to the re-listing, old name to new.</summary>
     [Fact]
     public void ARenameElsewhere_IsHandedToTheRelisting() {
-        var session = new FolderSession();
+        var session = Watching();
         session.NoteChange(new DirectoryChange(@"C:\folder\b.txt", Structural: true) { OldPath = @"C:\folder\a.txt" });
 
         var decision = session.DecideWatchTick(busy: false, new[] { Row("a.txt") });
@@ -616,10 +649,60 @@ public class FolderSessionTests {
         Assert.Equal(new[] { (@"C:\folder\a.txt", @"C:\folder\b.txt") }, decision.Renames);
     }
 
+    /// <summary>Audit 2026-11-18, P2: a change in the folder left - noted before the watcher moved on - is not about this one.</summary>
+    [Fact]
+    public void AChangeInAnotherFolder_IsDropped() {
+        var session = Watching();
+        session.NoteChange(new DirectoryChange(@"C:\other\a.txt", Structural: true) { OldPath = @"C:\other\b.txt" });
+
+        Assert.Equal(WatchOutcome.Idle, session.DecideWatchTick(busy: false, Array.Empty<FileSystemEntry>()).Outcome);
+    }
+
+    /// <summary>Audit 2026-11-18, P2: the watcher losing track says nothing about where - it is answered whatever the folder.</summary>
+    [Fact]
+    public void TheWatcherLosingTrack_IsAlwaysAnswered() {
+        var session = Watching();
+        session.NoteChange(DirectoryChange.Unknown);
+
+        Assert.Equal(WatchOutcome.Relist, session.DecideWatchTick(busy: false, Array.Empty<FileSystemEntry>()).Outcome);
+    }
+
+    /// <summary>Audit 2026-11-18, P2: what was noted about the folder left - its renames too - does not ride into the next one.</summary>
+    [Fact]
+    public void ListingAnotherFolder_ForgetsWhatWasNoted() {
+        var session = Watching();
+        session.NoteChange(new DirectoryChange(@"C:\folder\b.txt", Structural: true) { OldPath = @"C:\folder\a.txt" });
+
+        session.BeginListing(@"C:\next", out _);
+
+        Assert.Equal(WatchOutcome.Idle, session.DecideWatchTick(busy: false, Array.Empty<FileSystemEntry>()).Outcome);
+    }
+
+    /// <summary>Audit 2026-11-18, P2: listing the same folder again keeps what the watcher noted - it is answered after.</summary>
+    [Fact]
+    public void ListingTheSameFolderAgain_KeepsWhatWasNoted() {
+        var session = Watching();
+        session.NoteChange(new DirectoryChange(@"C:\folder\b.txt", Structural: true));
+
+        session.BeginListing(@"C:\FOLDER\", out _);
+
+        Assert.Equal(WatchOutcome.Relist, session.DecideWatchTick(busy: false, Array.Empty<FileSystemEntry>()).Outcome);
+    }
+
+    /// <summary>Audit 2026-11-18, P2: a change at a drive's root is the root's.</summary>
+    [Fact]
+    public void AChangeAtADriveRoot_IsTheRoots() {
+        var session = new FolderSession();
+        session.BeginListing(@"D:\", out _);
+        session.NoteChange(new DirectoryChange(@"D:\a.txt", Structural: true));
+
+        Assert.Equal(WatchOutcome.Relist, session.DecideWatchTick(busy: false, Array.Empty<FileSystemEntry>()).Outcome);
+    }
+
     /// <summary>L-11: a tick while a name is edited or a rename is on its way holds the rename too, for the tick after.</summary>
     [Fact]
     public void ABusyTick_HoldsTheRenames_ForTheNextOne() {
-        var session = new FolderSession();
+        var session = Watching();
         session.NoteChange(new DirectoryChange(@"C:\folder\b.txt", Structural: true) { OldPath = @"C:\folder\a.txt" });
 
         Assert.Equal(WatchOutcome.Hold, session.DecideWatchTick(busy: true, Array.Empty<FileSystemEntry>()).Outcome);

@@ -4,8 +4,9 @@ using Wander.Core.Logging;
 namespace Wander.App.Diagnostics;
 
 /// <summary>
-/// One line of process vitals in the session log, every five seconds and
-/// at every stall.
+/// One line of process vitals in the session log, every five seconds while
+/// Wander is active (a minute in the background), at every stall written
+/// and while the window does not answer.
 ///
 /// <para>
 /// PerfLog says where a slow moment went; this says what the process
@@ -25,13 +26,6 @@ namespace Wander.App.Diagnostics;
 /// </para>
 /// </summary>
 public static class SystemVitals {
-    /// <summary>
-    /// How often a line is written when nothing is wrong. Long enough to
-    /// stay out of the way of the lines that say something happened, short
-    /// enough that a half-minute of trouble has half a dozen samples in it.
-    /// </summary>
-    private const long IntervalMs = 5000;
-
     private static readonly Lock _lock = new();
 
     /// <summary>
@@ -65,10 +59,17 @@ public static class SystemVitals {
     }
 
 
-    /// <summary>Writes a line if five seconds have passed. Called from the heartbeat.</summary>
-    public static void Tick() {
+    /// <summary>
+    /// Writes a line if <paramref name="interval"/> has passed. Called from
+    /// the heartbeat, with the interval the window's state calls for
+    /// (<see cref="Wander.Core.Diagnostics.UiWatchRules.PulseInterval"/>):
+    /// five seconds active - out of the way of the lines that say something
+    /// happened, yet half a dozen samples in a half-minute of trouble - and
+    /// a minute in the background.
+    /// </summary>
+    public static void Tick(TimeSpan interval) {
         lock (_lock) {
-            if (Environment.TickCount64 - _lastLineMs >= IntervalMs) {
+            if (Environment.TickCount64 - _lastLineMs >= (long)interval.TotalMilliseconds) {
                 WriteLocked();
             }
         }

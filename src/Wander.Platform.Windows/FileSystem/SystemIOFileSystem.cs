@@ -364,7 +364,7 @@ public sealed class SystemIOFileSystem : IFileSystem {
             // the copy goes instead, so the move is not done rather than
             // half-done, and a retry finds the target free and says why the
             // source stays (review of sprint 2).
-            TryDelete(destination);
+            TakeBackFile(destination);
 
             throw;
         }
@@ -866,14 +866,31 @@ public sealed class SystemIOFileSystem : IFileSystem {
         }
     }
 
-    /// <summary>The part-copied folder of a failed move, best effort - like <see cref="TryDelete"/>.</summary>
+    /// <summary>
+    /// The part-copied folder of a failed move is taken back from its destination, best effort.
+    /// What could not go stays under its real name - the person finds it
+    /// there - so it is said, with the path (audit 2026-11-18, L12); the
+    /// move's own error is still the one reported.
+    /// </summary>
     private static void TryDeleteDirectory(string path) {
         try {
             if (Directory.Exists(path)) {
                 Directory.Delete(path, recursive: true);
             }
-        } catch {
-            // What could not go stays; the move's own error is the one to report.
+        } catch (Exception ex) {
+            Log.Current.Warn($"Move failed, and what it had copied is still there: {path} - {ex.Message}");
+        }
+    }
+
+    /// <summary>The same for a file moved off its volume (<see cref="TryDeleteDirectory"/>).</summary>
+    private static void TakeBackFile(string path) {
+        try {
+            if (File.Exists(path)) {
+                File.SetAttributes(path, FileAttributes.Normal);
+                File.Delete(path);
+            }
+        } catch (Exception ex) {
+            Log.Current.Warn($"Move failed, and its copy is still there: {path} - {ex.Message}");
         }
     }
 

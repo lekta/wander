@@ -36,6 +36,9 @@ public sealed class ContentSearchService {
     private readonly ExtractedTextCache _cache;
     private readonly ILogger _log;
 
+    // A failed extraction's stack, once per extractor and kind of fault (audit 2026-11-18, L12).
+    private readonly StackOnce _failures = new();
+
 
     /// <param name="extractors">
     /// Tried in order; the first one that returns text wins. Order matters:
@@ -92,7 +95,7 @@ public sealed class ContentSearchService {
             } catch (OperationCanceledException) {
                 throw;
             } catch (Exception ex) {
-                _log.Warn($"Extractor {extractor.GetType().Name} failed on {entry.FullPath}: {ex.Message}");
+                _log.Warn($"Extractor {extractor.GetType().Name} failed on {entry.FullPath}: {_failures.Describe(extractor.GetType().Name, ex)}");
 
                 return null;
             }
@@ -334,7 +337,7 @@ public sealed class ContentSearchService {
                 // Extractors promise to answer null rather than throw. One
                 // that breaks the promise must still not end a search over
                 // ten thousand other files.
-                _log.Warn($"Extractor {extractor.GetType().Name} failed on {entry.FullPath}: {ex.Message}");
+                _log.Warn($"Extractor {extractor.GetType().Name} failed on {entry.FullPath}: {_failures.Describe(extractor.GetType().Name, ex)}");
                 continue;
             }
 

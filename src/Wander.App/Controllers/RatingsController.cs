@@ -114,7 +114,7 @@ public sealed class RatingsController {
         }
 
         _pass = new CancellationTokenSource();
-        _ = RunPassAsync(items, path, sort, epoch, _pass.Token);
+        RunPassAsync(items, path, sort, epoch, _pass.Token).Forget(_log, "RunPass");
     }
 
 
@@ -192,9 +192,13 @@ public sealed class RatingsController {
 
 
     /// <summary>
-    /// Re-reads a few rows from disk — their sidecars and what those say —
-    /// and swaps them in without touching the rest of the listing. The
-    /// answer to an undo that changed metadata and nothing else.
+    /// Re-reads a few rows from disk — the file itself, its sidecars and
+    /// what those say — and swaps them in without touching the rest of the
+    /// listing or its order. The answer to an undo that changed metadata
+    /// and nothing else, and to a file another program is writing: its
+    /// size and date move with it (<see cref="FileSystemEntry.Restated"/>).
+    /// A file gone meanwhile keeps its row; its going is the watcher's
+    /// next event.
     ///
     /// <para>
     /// The companion lookup goes to the disk once per row, so it runs on a
@@ -202,8 +206,10 @@ public sealed class RatingsController {
     /// hundred directory probes, and the folder must not stop for them.
     /// </para>
     /// </summary>
-    public async Task RefreshRowsAsync(IReadOnlyList<string> mainPaths) {
-        if (_metadata is null || mainPaths.Count == 0) {
+    /// <param name="mainPaths">The rows to re-read, by their main file.</param>
+    /// <param name="epoch">The listing the rows were asked from; an answer for an older one is dropped.</param>
+    public async Task RefreshRowsAsync(IReadOnlyList<string> mainPaths, int epoch) {
+        if (mainPaths.Count == 0) {
             return;
         }
 
@@ -220,19 +226,27 @@ public sealed class RatingsController {
         IReadOnlyList<FileSystemEntry> updated;
         try {
             updated = await Task.Run(() => rows.Select(row => {
+                if (_fs.GetEntry(row.FullPath) is not { } fresh) {
+                    return null;
+                }
                 var companions = integrate
                     ? _companions.FindCompanions(row.FullPath, _fs)
                     : Array.Empty<string>();
-                var refreshed = row with { Companions = companions.Count > 0 ? companions : null };
+                var refreshed = row.Restated(fresh) with { Companions = companions.Count > 0 ? companions : null };
 
-                return refreshed with { Rating = _metadata.ReadRatingFor(refreshed) };
-            }).ToArray());
+                // Without the metadata service the rating is the row's; the
+                // file's own size and date are fresh all the same.
+                return _metadata is null ? refreshed : refreshed with { Rating = _metadata.ReadRatingFor(refreshed) };
+            }).OfType<FileSystemEntry>().ToArray());
         } catch (Exception ex) {
             _log.Warn($"Metadata re-read failed: {ex.Message}");
 
             return;
         }
 
+        if (!_isCurrent(epoch)) {
+            return;
+        }
         _search.Replace(updated);
         // Said as a write says it: a row the rating filter hides changes
         // nothing on the list, and a picture full screen may be that row.

@@ -111,7 +111,7 @@ Claude никогда не ведёт настоящий рабочий стол
 | Метрика | Как снять | Порог / базлайн |
 |---|---|---|
 | Первый кадр | `Startup: first frame N ms` в сеансах костяка, медиана (`release-metrics.ps1`) | базлайн + 20 % |
-| Неответ UI | `PERF ui.stall` | одиночные < 400 мс (пишутся от 150); на холодной папке — сотни, не секунды |
+| Неответ UI | `PERF ui.stall` — только когда активно окно Wander, любое (в фоне не пишется: там стоп — пробуждение простаивающего потока, не работа); `UI not responding for N s` — при любом | одиночные < 400 мс (пишутся от 150); на холодной папке — сотни, не секунды; `UI not responding` — ни одного |
 | Первый экран | `First screen painted in N ms` по профилю `photos` холодно / тепло | базлайн снять |
 | Шаблон плитки | `LAYOUT <вид> container: N visuals` (вид — `TilesView`, `IconsView`, `GalleryView`) | плитка 8, значки 8 (место под бейдж оценки), галерея 9 (без оценки) |
 | Реализации на навигацию | `COUNT layout.new: N in K passes` | K = 1 |
@@ -128,7 +128,8 @@ Claude никогда не ведёт настоящий рабочий стол
 | Поиск | `HARNESS search finished in N ms` сценария `search` (5000 файлов `big`, содержимое `docs`) | базлайн снять: в `measurements/` его нет |
 
 **Строка `SYS` в логе** (`SystemVitals`): heartbeat `UiStallWatch` раз в
-5 с и на каждый `ui.stall` пишет `SYS ws=… private=… gen=0/1/2 alloc=+N
+5 с при активном окне, раз в 60 с — при неактивном, на каждый записанный
+`ui.stall` и на каждую строку `UI not responding` пишет `SYS ws=… private=… gen=0/1/2 alloc=+N
 loh=… handles=… threads=… cpu=… gcpause=+N` (МБ, мс) — замеры и в живых
 сессиях, не только в харнессе. Глубже — `dotnet-counters`, `dotnet-trace` /
 PerfView, dotTrace из Rider: по требованию, не в прогон.

@@ -543,7 +543,7 @@ public sealed class MainViewModel : ObservableObject {
         // copying / deleting / renaming those would bypass the shell's
         // restore-tracking and corrupt the bin's state. Read-only browsing
         // only in this iteration.
-        DeleteCommand = new RelayCommand(p => _ = DeleteTargetAsync(p, permanent: false), CanDelete);
+        DeleteCommand = new RelayCommand(p => DeleteTargetAsync(p, permanent: false).Forget(_log, "DeleteTarget"), CanDelete);
         // The name from the prompt: confirmed with its own Enter, so the
         // keyboard goes onto the renamed row, as after the inline editor's.
         RenameCommand = new RelayCommand(p => Rename(_selectedEntry, p as string, takeFocus: true), _ => _selectedEntry is not null && !IsCurrentShellNamespace);
@@ -556,11 +556,11 @@ public sealed class MainViewModel : ObservableObject {
         // folder turns them into an extraction. The bin stays excluded -
         // pasting a $Recycle.Bin backing path copies a mangled file.
         CopyCommand = new RelayCommand(Copy, CanCopy);
-        ExtractCommand = new RelayCommand(p => _ = ExtractSelectionAsync(p), CanExtractSelection);
-        ExtractHereCommand = new RelayCommand(p => _ = ExtractHereAsync(p), CanExtractSelection);
-        CopyToCommand = new RelayCommand(p => _ = CopyToAsync(p), CanCopyTo);
+        ExtractCommand = new RelayCommand(p => ExtractSelectionAsync(p).Forget(_log, "ExtractSelection"), CanExtractSelection);
+        ExtractHereCommand = new RelayCommand(p => ExtractHereAsync(p).Forget(_log, "ExtractHere"), CanExtractSelection);
+        CopyToCommand = new RelayCommand(p => CopyToAsync(p).Forget(_log, "CopyTo"), CanCopyTo);
         CutCommand = new RelayCommand(Cut, CanCut);
-        PasteCommand = new RelayCommand(p => _ = PasteAsync(p), CanPaste);
+        PasteCommand = new RelayCommand(p => PasteAsync(p).Forget(_log, "Paste"), CanPaste);
         NewFolderCommand = new RelayCommand(NewFolder, p => NewFolderParent(p) is not null);
         RestoreFromRecycleBinCommand = new RelayCommand(
             _ => RestoreFromRecycleBin(),
@@ -589,8 +589,8 @@ public sealed class MainViewModel : ObservableObject {
         ConfigureActionsCommand = new RelayCommand(
             _ => OpenSettingsDialog(Settings.Categories.OfType<ActionsSettingsCategory>().FirstOrDefault()));
         // The row carries the action's id - through a MenuCall from the menus.
-        RunActionCommand = new RelayCommand(p => _ = RunActionAsync(p), p => !ResolveTarget(p).Place.IsReadOnly);
-        RunActionToFolderCommand = new RelayCommand(p => _ = RunActionAsync(p, pickFolder: true), p => !ResolveTarget(p).Place.IsReadOnly);
+        RunActionCommand = new RelayCommand(p => RunActionAsync(p).Forget(_log, "RunAction"), p => !ResolveTarget(p).Place.IsReadOnly);
+        RunActionToFolderCommand = new RelayCommand(p => RunActionAsync(p, pickFolder: true).Forget(_log, "RunAction"), p => !ResolveTarget(p).Place.IsReadOnly);
         // GitHub's template chooser lets the user pick "Bug report" or
         // "Feature request"; nothing is pre-filled, so no session data is
         // involved — unlike the crash path, which bundles diagnostics.
@@ -635,9 +635,9 @@ public sealed class MainViewModel : ObservableObject {
         TogglePreviewCommand = new RelayCommand(_ => IsPreviewVisible = !IsPreviewVisible);
         ToggleFoldersCommand = new RelayCommand(_ => IsFoldersVisible = !IsFoldersVisible);
         UndoCommand = new RelayCommand(_ => UndoLast(), _ => _undo.CanUndo);
-        PermanentDeleteCommand = new RelayCommand(p => _ = DeleteTargetAsync(p, permanent: true), CanDelete);
+        PermanentDeleteCommand = new RelayCommand(p => DeleteTargetAsync(p, permanent: true).Forget(_log, "DeleteTarget"), CanDelete);
         OpenLogFileCommand = new RelayCommand(_ => Shell.OpenLogFile(), _ => ServiceLocator.IsRegistered<ILogFile>());
-        DebugOperationCommand = new RelayCommand(p => _ = RunDebugOperationAsync(p as string));
+        DebugOperationCommand = new RelayCommand(p => RunDebugOperationAsync(p as string).Forget(_log, "RunDebugOperation"));
         ToggleBookmarksCommand = new RelayCommand(_ => IsBookmarksExpanded = !IsBookmarksExpanded);
         ToggleDrivesCommand = new RelayCommand(_ => IsDrivesExpanded = !IsDrivesExpanded);
         OpenComputerCommand = new RelayCommand(_ => _nav.NavigateTo(ShellPaths.Computer, NavigationSource.Drives));
@@ -647,7 +647,7 @@ public sealed class MainViewModel : ObservableObject {
         EjectDriveCommand = new RelayCommand(
             p => {
                 if (EjectRootOf(p) is { } root) {
-                    _dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => _ = EjectAsync(root)));
+                    _dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => EjectAsync(root).Forget(_log, "Eject")));
                 }
             },
             p => EjectRootOf(p) is not null);
@@ -807,9 +807,9 @@ public sealed class MainViewModel : ObservableObject {
         // were built before either was known.
         PushPalette();
         Preview.ListIsGallery = _viewMode == ViewMode.Gallery;
-        _ = LocateToolsAsync();
+        LocateToolsAsync().Forget(_log, "LocateTools");
         // Bookmarks on a phone show once it is known to be plugged in.
-        _ = RefreshPluggedDevicesAsync();
+        RefreshPluggedDevicesAsync().Forget(_log, "RefreshPluggedDevices");
     }
 
 
@@ -1357,7 +1357,7 @@ public sealed class MainViewModel : ObservableObject {
         PreviewPairShapes = (null, null);
         _pairShapesCts?.Cancel();
         _pairShapesCts = new CancellationTokenSource();
-        _ = ShowPairAsync(p.First.FullPath, p.Second.FullPath, _pairShapesCts.Token);
+        ShowPairAsync(p.First.FullPath, p.Second.FullPath, _pairShapesCts.Token).Forget(_log, "ShowPair");
     }
 
     private async Task ShowPairAsync(string first, string second, CancellationToken ct) {
@@ -1433,7 +1433,7 @@ public sealed class MainViewModel : ObservableObject {
         _panelFolderPath = folder;
         _panelFolderCts?.Cancel();
         _panelFolderCts = new CancellationTokenSource();
-        _ = ShowPanelFolderAsync(folder, _panelFolderCts.Token);
+        ShowPanelFolderAsync(folder, _panelFolderCts.Token).Forget(_log, "ShowPanelFolder");
     }
 
     private async Task ShowPanelFolderAsync(string folder, CancellationToken ct) {
@@ -2071,7 +2071,7 @@ public sealed class MainViewModel : ObservableObject {
             // A file on a phone or a camera has no path another program could
             // open, the way an archive entry has none: a copy is made to open.
             if (DevicePath.IsInside(entry.FullPath)) {
-                _ = OpenArchiveEntryAsync(entry.FullPath);
+                OpenArchiveEntryAsync(entry.FullPath).Forget(_log, "OpenArchiveEntry");
                 return;
             }
 
@@ -2092,7 +2092,7 @@ public sealed class MainViewModel : ObservableObject {
                     NavigateTo(entry.FullPath, NavigationSource.RightPane);
                 } else {
                     // No path on disk to hand the shell, so make one.
-                    _ = OpenArchiveEntryAsync(entry.FullPath);
+                    OpenArchiveEntryAsync(entry.FullPath).Forget(_log, "OpenArchiveEntry");
                 }
                 return;
             }
@@ -2134,7 +2134,7 @@ public sealed class MainViewModel : ObservableObject {
     // --- Drop -----------------------------------------------------------
     /// <param name="pane">The folder panel whose row was dropped on; null for the list and the window.</param>
     public void HandleDrop(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect, Pane? pane = null) {
-        _ = HandleDropAsync(sourcePaths, targetFolder, effect, pane);
+        HandleDropAsync(sourcePaths, targetFolder, effect, pane).Forget(_log, "HandleDrop");
     }
 
     private async Task HandleDropAsync(IReadOnlyList<string> sourcePaths, string? targetFolder, DropEffect effect, Pane? pane) {
@@ -2510,9 +2510,9 @@ public sealed class MainViewModel : ObservableObject {
 
             return;
         }
-        _ = RefreshPinVolumesAsync();
+        RefreshPinVolumesAsync().Forget(_log, "RefreshPinVolumes");
         if (!change.Arrived) {
-            _ = LeaveRemovedVolumeAsync();
+            LeaveRemovedVolumeAsync().Forget(_log, "LeaveRemovedVolume");
         }
     }
 
@@ -2846,7 +2846,7 @@ public sealed class MainViewModel : ObservableObject {
             SaveState();
         };
         _log.Info($"Pins loaded: {_pins.Count} in {_pins.FolderCount} folders{(_pinStore.IsReadOnly ? " (read-only)" : "")}");
-        _ = RefreshPinVolumesAsync();
+        RefreshPinVolumesAsync().Forget(_log, "RefreshPinVolumes");
 
         _isPreviewVisible = session.IsPreviewVisible;
         Raise(nameof(IsPreviewVisible));
@@ -2915,7 +2915,7 @@ public sealed class MainViewModel : ObservableObject {
         _writtenPlace = session.LastPlace;
         ApplyFolderMemory();
         _session.LoadPlaces(session.FolderPlaces);
-        _ = OpenStartFolderAsync(Settings.RestoreLastFolder ? session.LastPath : null, session.LastPlace);
+        OpenStartFolderAsync(Settings.RestoreLastFolder ? session.LastPath : null, session.LastPlace).Forget(_log, "OpenStartFolder");
 
         // Restore is the saved state coming back, not a change worth
         // saving: whatever armed the debounce on the way is disarmed here,
@@ -3328,7 +3328,7 @@ public sealed class MainViewModel : ObservableObject {
                 break;
 
             case WatchOutcome.RefreshRows:
-                _ = Ratings.RefreshRowsAsync(decision.Rows!.Select(r => r.FullPath).ToArray());
+                Ratings.RefreshRowsAsync(decision.Rows!.Select(r => r.FullPath).ToArray(), _session.Epoch).Forget(_log, "RefreshRows");
                 break;
         }
     }
@@ -3364,7 +3364,7 @@ public sealed class MainViewModel : ObservableObject {
         // whose files are gone. That is what makes a delete or a rename
         // done on a result actually leave the list.
         if (ContentSearch.IsShowingResults) {
-            _ = SearchResults.PruneMissingAsync();
+            SearchResults.PruneMissingAsync().Forget(_log, "PruneMissing");
             // Results are a list of their own, not a folder listing — the
             // "this folder is gone" panel has nothing to sit on top of.
             SetMissingFolder(null);
@@ -3390,7 +3390,7 @@ public sealed class MainViewModel : ObservableObject {
 
         if (_nav.Current is null) {
             _hiddenCount = 0;
-            _session.NoteListingGone();
+            _session.NoteListingGone(_session.Epoch);
             _search.SetSource(Array.Empty<FileSystemEntry>());
             Entries.Clear();
             Status = "";
@@ -3406,14 +3406,14 @@ public sealed class MainViewModel : ObservableObject {
         // those flags and Wander's "what to hide" preference is
         // filesystem-only.
         if (IsCurrentShellNamespace && TryGetShellNamespace() is { } ns) {
-            _ = RefreshShellAsync(ns, _nav.Current);
+            RefreshShellAsync(ns, _nav.Current).Forget(_log, "RefreshShell");
             return;
         }
 
         // Settings are read here, on the UI thread, and carried into the
         // worker as values — the background pass must not race the settings
         // dialog.
-        _ = RefreshFolderAsync(_nav.Current, Settings.Visibility, CurrentSort, Settings.IntegrateCompanions);
+        RefreshFolderAsync(_nav.Current, Settings.Visibility, CurrentSort, Settings.IntegrateCompanions).Forget(_log, "RefreshFolder");
     }
 
     /// <summary>
@@ -3616,16 +3616,23 @@ public sealed class MainViewModel : ObservableObject {
         } catch (OperationCanceledException) {
             return;
         } catch (Exception ex) when (ex is DirectoryNotFoundException or DriveNotFoundException) {
+            // A listing overtaken while it hung - a share dropped, a drive
+            // pulled - fails after the next folder landed: it is about
+            // nothing on screen (audit 2026-11-18, P1).
+            if (token.IsCancellationRequested || !_session.NoteListingGone(epoch)) {
+                return;
+            }
             // Not an error to report in the status bar and forget: the
             // folder is gone, and the file area says so — with the way out
             // when the path came from a bookmark.
             _log.Info($"Folder is gone: {path}");
-            _session.NoteListingGone();
             _search.SetSource(Array.Empty<FileSystemEntry>());
             SetMissingFolder(path);
         } catch (Exception ex) {
+            if (token.IsCancellationRequested || !_session.NoteListingGone(epoch)) {
+                return;
+            }
             _log.Error($"Enumerate failed: {path}", ex);
-            _session.NoteListingGone();
             Entries.Clear();
             Fail(string.Format(Strings.StatusError, ex.Message));
         } finally {
@@ -3711,6 +3718,10 @@ public sealed class MainViewModel : ObservableObject {
             } catch (OperationCanceledException) {
                 return;
             } catch (Exception ex) {
+                // Overtaken while the shell was thinking: about nothing on screen (P1).
+                if (token.IsCancellationRequested || !_session.IsCurrent(epoch)) {
+                    return;
+                }
                 _log.Error($"Shell enumerate failed: {shellPath}", ex);
                 Fail(device is not null ? string.Format(Strings.StatusDeviceUnreadable, device.Device, DescribeError(ex, shellPath))
                     : archive is null ? string.Format(Strings.StatusError, ex.Message)
@@ -5168,7 +5179,7 @@ public sealed class MainViewModel : ObservableObject {
                 break;
 
             case 1:
-                _ = DeleteFolderAsync(bookmark.FullPath, permanent);
+                DeleteFolderAsync(bookmark.FullPath, permanent).Forget(_log, "DeleteFolder");
                 break;
 
             default:
@@ -5347,7 +5358,7 @@ public sealed class MainViewModel : ObservableObject {
         };
         ShowModal(dlg);
         // A tool may have been installed or pointed at, a row added.
-        _ = LocateToolsAsync();
+        LocateToolsAsync().Forget(_log, "LocateTools");
         OfferRestartForLanguage();
     }
 
@@ -5886,7 +5897,7 @@ public sealed class MainViewModel : ObservableObject {
             // moved from has taken the listing with it - re-listing the path
             // it left would show "folder is gone".
             if (action.MetadataTargets.Count > 0) {
-                _ = Ratings.RefreshRowsAsync(action.MetadataTargets);
+                Ratings.RefreshRowsAsync(action.MetadataTargets, _session.Epoch).Forget(_log, "RefreshRows");
             } else if (!FollowRelocated(action.MovesOnUndo, target: null)) {
                 // Point the user at what came back, not at wherever the
                 // selection happened to be.
@@ -6156,7 +6167,7 @@ public sealed class MainViewModel : ObservableObject {
             return;
         }
 
-        _ = RunActionOnAsync(action, paths, outputFolder);
+        RunActionOnAsync(action, paths, outputFolder).Forget(_log, "RunActionOn");
     }
 
     /// <summary>One action over the given paths, in an operation window of its own, with the report at the end.</summary>
@@ -6974,7 +6985,7 @@ public sealed class MainViewModel : ObservableObject {
     /// one after another; a cancel stops the rest.
     /// </summary>
     public void ExtractDroppedArchives(IReadOnlyList<string> archives, string target) {
-        _ = ExtractDroppedArchivesAsync(archives, target);
+        ExtractDroppedArchivesAsync(archives, target).Forget(_log, "ExtractDroppedArchives");
     }
 
     private async Task ExtractDroppedArchivesAsync(IReadOnlyList<string> archives, string target) {
@@ -7507,8 +7518,8 @@ public sealed class MainViewModel : ObservableObject {
             }
 
             var row = new OperationViewModel(
-                record, OperationRetry.Plan(record) is not null, id => _ = RetryOperationAsync(id), _tracker.Dismiss,
-                (id, root) => _ = EjectAsync(root, id));
+                record, OperationRetry.Plan(record) is not null, id => RetryOperationAsync(id).Forget(_log, "RetryOperation"), _tracker.Dismiss,
+                (id, root) => EjectAsync(root, id).Forget(_log, "Eject"));
             Operations.Insert(Math.Min(snapshots.Count + k, Operations.Count), row);
             if (record.HasProblems) {
                 _ = DescribeProblemsAsync(row, record);
