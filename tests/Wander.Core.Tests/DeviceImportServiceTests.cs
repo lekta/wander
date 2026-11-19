@@ -199,6 +199,48 @@ public class DeviceImportServiceTests {
     }
 
 
+    // --- Names a device may give and Windows may not take ----------------
+
+    [Fact]
+    public async Task AFolderNamedDotDot_IsPassedOver_AndCounted_NothingLandsAboveTheTarget() {
+        var scene = new Scene();
+        scene.Device.AddFolder(Camera + @"\..");
+        scene.Device.AddFile(Camera + @"\..\evil.jpg", "out of bounds", _shot);
+
+        var result = Assert.Single(await scene.Import(Camera));
+
+        Assert.Equal(BatchItemStatus.Ok, result.Status);
+        Assert.Equal(1, result.SkippedNames);
+        Assert.All(scene.Fs.Files.Keys, path => Assert.StartsWith(@"D:\Photos\Camera\", Path.GetFullPath(path)));
+        Assert.True(scene.Fs.FileExists(@"D:\Photos\Camera\PXL_1.jpg"));
+    }
+
+    [Fact]
+    public async Task ANameLikeADrive_LandsInTheTarget_WithAnUnderscore() {
+        var scene = new Scene();
+        scene.Device.AddFile(Camera + @"\C:", "not a drive", _shot);
+
+        var result = Assert.Single(await scene.Import(Camera));
+
+        Assert.Equal(0, result.SkippedNames);
+        Assert.True(scene.Fs.FileExists(@"D:\Photos\Camera\C_"));
+        Assert.All(scene.Fs.Files.Keys, path => Assert.StartsWith(@"D:\Photos\Camera\", path));
+    }
+
+    [Fact]
+    public async Task ColonAndQuestionMarkInsideAName_BecomeUnderscores() {
+        var scene = new Scene();
+        string odd = Camera + @"\a:b?.jpg";
+        scene.Device.AddFile(odd, "odd", _shot);
+
+        var result = Assert.Single(await scene.Import(odd));
+
+        Assert.Equal(BatchItemStatus.Ok, result.Status);
+        Assert.Equal(@"D:\Photos\a_b_.jpg", result.FinalDestination);
+        Assert.True(scene.Fs.FileExists(@"D:\Photos\a_b_.jpg"));
+    }
+
+
     // --- The device goes away --------------------------------------------
 
     [Fact]

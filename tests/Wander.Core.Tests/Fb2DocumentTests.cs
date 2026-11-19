@@ -26,6 +26,17 @@ public class Fb2DocumentTests {
     // --- Read ----------------------------------------------------------
 
     [Fact]
+    public void Read_NestedPastTheLimit_IsNoBook_RatherThanAStackOverflow() {
+        // An unknown tag adds nothing to the HTML budget, so only the depth
+        // stops <x><x><x>...; a hundred thousand of them take the process down.
+        string Nested(int depth) => Book(
+            string.Concat(Enumerable.Repeat("<x>", depth)) + "deep" + string.Concat(Enumerable.Repeat("</x>", depth)));
+
+        Assert.NotNull(Fb2Document.Read(Stream(Nested(256))));
+        Assert.Null(Fb2Document.Read(Stream(Nested(257))));
+    }
+
+    [Fact]
     public void Read_TakesTitleAndAuthor() {
         string xml = Book(
             "<section><p>Текст</p></section>",

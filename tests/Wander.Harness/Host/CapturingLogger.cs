@@ -44,6 +44,8 @@ public sealed class CapturingLogger : ILogger, ILogFile {
 
     public string FilePath => _file.FilePath;
 
+    public void Flush() => _file.Flush();
+
     /// <summary>How long ago anything was logged - the runner's idea of "quiet".</summary>
     public long MillisecondsSinceLastLine => _clock.ElapsedMilliseconds - Interlocked.Read(ref _lastLineMs);
 

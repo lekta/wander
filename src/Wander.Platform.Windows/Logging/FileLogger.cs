@@ -72,11 +72,15 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
     public void Error(string message, Exception? ex = null) => Write("ERROR", message, ex);
 
 
-    public void Dispose() {
+    /// <summary>
+    /// The summary of a run of repeats still owed, and what the writer
+    /// holds, onto the disk - at the end of a session. The file stays open:
+    /// finalizers and the domain's handler still write after OnExit.
+    /// </summary>
+    public void Flush() {
         if (_disposed) {
             return;
         }
-        _disposed = true;
         try {
             // The tail of a flood belongs in the file, not in the state of
             // an object about to go away.
@@ -84,7 +88,20 @@ public sealed class FileLogger : ILogger, ILogFile, IDisposable {
                 if (_collapser.Flush() is { } repeats) {
                     EmitSummary(repeats);
                 }
+                _writer.Flush();
             }
+        } catch {
+            // ignore
+        }
+    }
+
+    public void Dispose() {
+        if (_disposed) {
+            return;
+        }
+        Flush();
+        _disposed = true;
+        try {
             _writer.Dispose();
         } catch {
             // ignore

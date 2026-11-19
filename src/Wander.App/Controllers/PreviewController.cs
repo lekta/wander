@@ -2120,8 +2120,8 @@ public sealed class PreviewController : ObservableObject {
 
         bool finished = false;
         _ = RaiseVeilWhenSlowAsync();
+        string path = _primary.FullPath;
         try {
-            string path = _primary.FullPath;
 
             // A file inside an archive has no bytes anyone but the shell
             // can read, so a copy is unpacked into scratch space and the
@@ -2195,6 +2195,22 @@ public sealed class PreviewController : ObservableObject {
             }
         } catch (OperationCanceledException) {
             // newer selection won — ignore
+        } catch (Exception ex) {
+            // A loader that let its parser's exception through: started as
+            // _ = UpdatePreviewAsync(...), it would die unseen and leave the
+            // pane blank. Said in the log, and the pane says "no preview".
+            Log.Error($"Preview failed: {path}", ex);
+            if (!ct.IsCancellationRequested) {
+                Kind = PreviewKind.Unsupported;
+                try {
+                    await ExplainUnreadableAsync(path, ct);
+                } catch (OperationCanceledException) {
+                    // newer selection won
+                } catch (Exception explainFailed) {
+                    // "No preview" is on screen already; only the reason is missing.
+                    Log.Warn($"Preview: why {path} is unreadable not found - {explainFailed.Message}");
+                }
+            }
         } finally {
             finished = true;
             if (!ct.IsCancellationRequested) {

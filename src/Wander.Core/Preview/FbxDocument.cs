@@ -60,6 +60,13 @@ internal static class FbxDocument {
     /// <summary>An array past this many elements is not a preview's; the reader stops.</summary>
     private const int MaxArray = 64 * 1024 * 1024;
 
+    /// <summary>
+    /// Levels of records a file may nest. Each level is a frame on the
+    /// stack, and 100 KB of empty records are tens of thousands of levels -
+    /// a stack overflow nothing catches. A real scene is a dozen deep.
+    /// </summary>
+    private const int MaxDepth = 256;
+
 
     /// <summary>The root (unnamed) node, or null when the bytes are not FBX this reads.</summary>
     public static FbxNode? Parse(byte[] bytes) {
@@ -68,7 +75,7 @@ internal static class FbxDocument {
             var root = new FbxNode("");
             int at = 27;
             bool wide = version >= 7500;
-            while (ReadNode(bytes, ref at, wide) is { } node) {
+            while (ReadNode(bytes, ref at, wide, depth: 1) is { } node) {
                 root.Children.Add(node);
             }
 
@@ -82,7 +89,8 @@ internal static class FbxDocument {
     // --- Binary ---
 
 
-    private static FbxNode? ReadNode(byte[] d, ref int at, bool wide) {
+    /// <exception cref="FormatException">Out of bounds, or nested past <see cref="MaxDepth"/>.</exception>
+    private static FbxNode? ReadNode(byte[] d, ref int at, bool wide, int depth) {
         int head = wide ? 25 : 13;
         if (at + head > d.Length) {
             return null;
@@ -100,6 +108,9 @@ internal static class FbxDocument {
         if (end > d.Length || end <= at) {
             throw new FormatException("FBX record out of bounds");
         }
+        if (depth > MaxDepth) {
+            throw new FormatException($"FBX records nested past {MaxDepth} levels");
+        }
 
         var node = new FbxNode(Encoding.ASCII.GetString(d, at + head, nameLength));
         int p = at + head + nameLength;
@@ -107,7 +118,7 @@ internal static class FbxDocument {
             node.Properties.Add(ReadProperty(d, ref p));
         }
         while (p < end) {
-            if (ReadNode(d, ref p, wide) is not { } child) {
+            if (ReadNode(d, ref p, wide, depth + 1) is not { } child) {
                 break;
             }
             node.Children.Add(child);
@@ -264,7 +275,7 @@ internal static class FbxDocument {
 
         public FbxNode Document() {
             var root = new FbxNode("");
-            while (Node() is { } node) {
+            while (Node(depth: 1) is { } node) {
                 root.Children.Add(node);
             }
 
@@ -273,10 +284,14 @@ internal static class FbxDocument {
 
 
         /// <summary>One node: <c>Name: values { children }</c>; null at the end of a list or the file.</summary>
-        private FbxNode? Node() {
+        /// <exception cref="FormatException">Not FBX text, or nested past <see cref="MaxDepth"/>.</exception>
+        private FbxNode? Node(int depth) {
             SkipBlank();
             if (_at >= _text.Length || _text[_at] == '}') {
                 return null;
+            }
+            if (depth > MaxDepth) {
+                throw new FormatException($"FBX text nested past {MaxDepth} levels");
             }
 
             int start = _at;
@@ -293,7 +308,7 @@ internal static class FbxDocument {
             SkipSpaces();
             if (_at < _text.Length && _text[_at] == '{') {
                 _at++;
-                while (Node() is { } child) {
+                while (Node(depth + 1) is { } child) {
                     node.Children.Add(child);
                 }
                 SkipBlank();

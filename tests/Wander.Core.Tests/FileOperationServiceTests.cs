@@ -158,6 +158,55 @@ public class FileOperationServiceTests {
         Assert.Throws<ArgumentException>(() => ops.Rename(FileA, " "));
     }
 
+    [Theory]
+    [InlineData(@"..\a.txt")]
+    [InlineData(@"E:\a.txt")]
+    [InlineData("a/b")]
+    [InlineData("CON")]
+    public void Rename_ANameThatIsNoName_IsRefused_AndNothingMoves(string newName) {
+        // Pasted into F2: a separator, a drive or a device is not a name,
+        // and Path.Combine would take the file somewhere else.
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[FileA] = new byte[0];
+
+        var refused = Assert.Throws<InvalidNameException>(() => ops.Rename(FileA, newName));
+
+        Assert.Equal(newName, refused.Name);
+        Assert.True(fs.Files.ContainsKey(FileA));
+        Assert.DoesNotContain(fs.CallLog, line => line.StartsWith("Rename:", StringComparison.Ordinal));
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Theory]
+    [InlineData(@"..\Ship.png")]
+    [InlineData(@"E:\Ship.png")]
+    [InlineData("a/b")]
+    [InlineData("CON")]
+    public void RenameMany_ANameThatIsNoName_IsRefused_AndTheCompanionsStay(string newName) {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[MainAsset] = new byte[0];
+        fs.Files[MetaAsset] = new byte[0];
+
+        Assert.Throws<InvalidNameException>(() => ops.RenameMany(new[] { (MainAsset, newName), (MetaAsset, newName + ".meta") }));
+
+        Assert.True(fs.Files.ContainsKey(MainAsset));
+        Assert.True(fs.Files.ContainsKey(MetaAsset));
+        Assert.Empty(fs.CallLog);
+        Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public void Rename_TrailingDotAndSpace_AreDropped_AsWindowsDropsThem() {
+        var (ops, fs, _, undo) = Setup();
+        fs.Files[FileA] = new byte[0];
+
+        ops.Rename(FileA, "b.txt. ");
+
+        Assert.True(fs.Files.ContainsKey(FileB));
+        undo.Undo();
+        Assert.True(fs.Files.ContainsKey(FileA));
+    }
+
     // --- RenameMany (a file plus its companion sidecars) ---------------
 
     private const string MainAsset = @"C:\assets\Sprite.png";

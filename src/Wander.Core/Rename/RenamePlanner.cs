@@ -187,6 +187,14 @@ public static class RenamePlanner {
         return !_reservedNames.Contains(stem);
     }
 
+    /// <summary>
+    /// The name without the dots and spaces at its end - what Win32 makes
+    /// of <c>b.txt.</c> on a rename anyway, said before it does.
+    /// </summary>
+    public static string TrimTail(string name) {
+        return name.TrimEnd('.', ' ');
+    }
+
 
     // --- Step 1: names ------------------------------------------------------
 

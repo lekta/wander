@@ -11,7 +11,11 @@ CHANGELOG и гит. База — ~720 строк: истории отладки
 Правки:
 - что хранилище делает с итогом чтения файла данных → `StoreRead.Plan`
   (Core); чтение, `.bad`, запись со сбросом, WARN — `JsonDataFile`
-  (Platform, `Persistence`).
+  (Platform, `Persistence`);
+- строка конца сеанса, её поиск в прошлом логе → `SessionEnd` (Core);
+  причины и запись — `App.EndSession`, старт — `App.WarnIfLastSessionDied`;
+- сбой диспетчера: репорт, выход → `UiFault.Answer` (Core); исполняет
+  `App.HookCrashLogging`.
 
 ## Столпы
 
@@ -442,6 +446,18 @@ Debug из Rider делят `%LOCALAPPDATA%\Wander` — так задумано.
 `Core/Diagnostics/LongWait.WatchAsync` (тест): `SLOW wait: …` / `SLOW
 done: …` — листинг архива, уровень панели, панель просмотра, распаковка.
 
+**Конец сеанса** (аудит 2026-11-18): последняя своя строка —
+`Session end: <причина>, exit <код>, up <ч:мм:сс>` (`Core/Logging/SessionEnd`,
+тест), раз на процесс (`App.EndSession`), затем `ILogFile.Flush` — итог
+серии `RepeatCollapser` и буфер; логгер не закрывается: после `OnExit`
+пишут финализаторы и обработчик домена. Причины: `close`, `restart`
+(`OnExit`), `session-ending` (`SessionEnding`), `fatal` (обработчик домена,
+код `0xE0434352`; сбой под `Headless`), `exit-crash` (сбой на выходе). На
+старте, на пуле: самый новый `session-*.log`, кроме своего, без этой
+строки в последних 64 КБ — WARN `Previous session ended without a word`
+с pid из имени и временем по mtime; pid жив и это Wander (второй
+экземпляр) — молчит.
+
 **Журнал действий** — `Core/Logging/ActionJournal`: что видел
 пользователь, словами статус-бара; кнопка в статус-баре открывает
 `journal-<pid>.txt`. Открытые папки и операции; описание самого списка
@@ -478,8 +494,12 @@ Claude — устаревшая копия (виртуализация AppData);
 фоне; лимиты — `IIconProvider.ConfigureCache(ThumbnailCacheOptions)`.
 
 **`crashes\*.zip`** — `CrashReporter`; `App.HookCrashLogging`:
-`DispatcherUnhandledException` (лог + репорт, `Handled = true`),
-`AppDomain.UnhandledException` (флаш), `TaskScheduler.UnobservedTaskException`.
+`DispatcherUnhandledException` — ответ `Core/Diagnostics/UiFault.Answer`
+(тест): на выходе (`App.IsShuttingDown` или `Dispatcher.HasShutdownStarted`)
+— ERROR, `StopOperationsBeforeDying`, `exit-crash`, `Environment.Exit(1)`,
+без репорта: проглоченный сбой оставлял процесс без окна на часы; под
+`Headless` — `ShutdownWithoutAsking(1)`; иначе — лог + репорт, `Handled = true`;
+`AppDomain.UnhandledException` (флаш, `fatal`); `TaskScheduler.UnobservedTaskException`.
 Репорт — заготовка GitHub issue + локальный zip; **ничего не уходит без
 действия пользователя**; на ту же ошибку — не чаще раза в минуту
 (`App.ShouldOffer`); под `--smoke` выключен.

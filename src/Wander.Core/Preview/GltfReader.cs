@@ -42,6 +42,13 @@ internal static class GltfReader {
     private const int ComponentUInt = 5125;
     private const int ComponentFloat = 5126;
 
+    /// <summary>
+    /// Levels of nodes the scene may nest: a skeleton is some dozens, a
+    /// chain of thousands is a stack overflow nothing catches. Not
+    /// ThreeMfReader's 16, which a skeleton outgrows.
+    /// </summary>
+    private const int MaxDepth = 256;
+
 
     public static MeshData? Read(string path, ModelTextures textures) {
         byte[] bytes = SharedRead.ReadAllBytes(path);
@@ -329,7 +336,7 @@ internal static class GltfReader {
         var visited = new HashSet<int>();
 
         foreach (int index in roots) {
-            Walk(nodes.Value, index, Matrix.Identity, placements, visited);
+            Walk(nodes.Value, index, Matrix.Identity, placements, visited, depth: 1);
         }
 
         return placements;
@@ -357,12 +364,19 @@ internal static class GltfReader {
     /// <paramref name="visited"/> is not an optimisation: glTF nodes are
     /// indices, and a malformed file can point a child back at its parent.
     /// Without it that file is an infinite recursion in a preview pane.
+    /// Nor is it enough: a chain of ten thousand nodes, each the child of
+    /// the one before, is no cycle and as deep a stack - hence
+    /// <see cref="MaxDepth"/>.
     /// </summary>
+    /// <exception cref="FormatException">Nested past <see cref="MaxDepth"/>.</exception>
     private static void Walk(
         JsonElement nodes, int index, Matrix parent,
-        List<(int, Matrix)> placements, HashSet<int> visited) {
+        List<(int, Matrix)> placements, HashSet<int> visited, int depth) {
         if (index < 0 || index >= nodes.GetArrayLength() || !visited.Add(index)) {
             return;
+        }
+        if (depth > MaxDepth) {
+            throw new FormatException($"glTF nodes nested past {MaxDepth} levels");
         }
 
         var node = nodes[index];
@@ -373,7 +387,7 @@ internal static class GltfReader {
         }
         if (ArrayOf(node, "children") is { } children) {
             foreach (var child in children.EnumerateArray()) {
-                Walk(nodes, child.GetInt32(), world, placements, visited);
+                Walk(nodes, child.GetInt32(), world, placements, visited, depth + 1);
             }
         }
     }

@@ -61,6 +61,28 @@ public class DevicePathTests {
     }
 
     [Fact]
+    public void WhatWindowsForbidsInAName_IsMadeAnUnderscore() {
+        // Legal on Android, not on Windows: "C:" would be a drive to Path.Combine.
+        Assert.Equal("C_", DevicePath.SafeName("C:"));
+        Assert.Equal("a_b_.jpg", DevicePath.SafeName("a:b?.jpg"));
+        Assert.Equal("______.txt", DevicePath.SafeName("*\"<>|\u0001.txt"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    [InlineData("..")]
+    public void ANameThatIsAPlaceNotAName_HasNoDiskName(string name) {
+        Assert.Null(DevicePath.DiskName(name));
+    }
+
+    [Fact]
+    public void ADiskName_IsTheSafeName() {
+        Assert.Equal("C_", DevicePath.DiskName("C:"));
+        Assert.Equal("..a", DevicePath.DiskName("..a"));
+    }
+
+    [Fact]
     public void AContainer_IsAnArchiveOrADevice() {
         // No shell namespace in a test host: archives answer "no", devices
         // are told by the string alone.

@@ -218,7 +218,10 @@ public static class MeshFile {
         } catch (Exception ex) when (
             ex is IOException or UnauthorizedAccessException or NotSupportedException
                 or OutOfMemoryException or FormatException or ArgumentException
-                or InvalidDataException or System.Xml.XmlException or OverflowException or IndexOutOfRangeException) {
+                or InvalidDataException or System.Xml.XmlException or OverflowException or IndexOutOfRangeException
+                // A cut-short .gltf (JsonDocument.Parse), a number written
+                // as a string ("mode": "4" - GetInt32).
+                or System.Text.Json.JsonException or InvalidOperationException) {
             return null;
         }
     }

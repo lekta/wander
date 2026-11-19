@@ -7,6 +7,7 @@ using Wander.App.Util;
 using Wander.App.Views;
 using Wander.Core;
 using Wander.Core.Actions;
+using Wander.Core.Diagnostics;
 using Wander.Core.Localization;
 using Wander.Core.Logging;
 using Wander.Core.Navigation;
@@ -29,8 +30,19 @@ public partial class App : Application {
     /// <summary>How long a dying process gives its operations to let go of their files.</summary>
     private static readonly TimeSpan _crashWait = TimeSpan.FromSeconds(3);
 
+    /// <summary>The code Windows records for a process the runtime ended on an unhandled exception.</summary>
+    private const int UnhandledExceptionExitCode = unchecked((int)0xE0434352);
+
+    /// <summary>How much of the previous session's log is read for its last line.</summary>
+    private const int LogTailBytes = 64 * 1024;
+
     private static string _lastOfferSignature = "";
     private static DateTime _lastOfferUtc = DateTime.MinValue;
+
+    /// <summary>Why the session ends, set before it does (<see cref="SessionEnd"/>); null - the window was closed, or a restart.</summary>
+    private static string? _endReason;
+
+    private static int _sessionEnded;
 
 
     /// <summary>
@@ -104,12 +116,16 @@ public partial class App : Application {
         ServiceLocator.Register<Conflict.IPairViewer>(new Views.CompareWindow.Viewer());
         HookCrashLogging();
         // WPF answers an unrefused session end with Shutdown.
-        SessionEnding += (_, _) => IsShuttingDown = true;
+        SessionEnding += (_, _) => {
+            IsShuttingDown = true;
+            _endReason = SessionEnd.SessionEnding;
+        };
         WatchWindowsWhenHeadless();
         // Yesterday's scratch copies of archive entries. Swept on the way in
         // rather than on the way out: a crash is precisely when the tidy-up
         // on exit would not have run.
         SweepTempCopies();
+        WarnIfLastSessionDied();
         SweepLogs();
         base.OnStartup(e);
     }
@@ -129,6 +145,26 @@ public partial class App : Application {
             }
         }
         base.OnExit(e);
+        EndSession(_endReason ?? (RestartRequested ? SessionEnd.Restart : SessionEnd.Close), e.ApplicationExitCode);
+    }
+
+
+    /// <summary>
+    /// The session's last line (<see cref="SessionEnd"/>), once, and the log
+    /// flushed behind it. Not closed: finalizers and the domain's handler
+    /// may still have something to say.
+    /// </summary>
+    private static void EndSession(string reason, int exitCode) {
+        if (Interlocked.Exchange(ref _sessionEnded, 1) != 0) {
+            return;
+        }
+
+        TimeSpan up;
+        using (var self = System.Diagnostics.Process.GetCurrentProcess()) {
+            up = DateTime.Now - self.StartTime;
+        }
+        Log.Info(SessionEnd.Line(reason, exitCode, up));
+        ServiceLocator.TryGet<ILogFile>()?.Flush();
     }
 
 
@@ -297,6 +333,57 @@ public partial class App : Application {
 
 
     /// <summary>
+    /// The newest session log but this one, read for its last line: none -
+    /// that session died without a word, and its pid is what the Windows
+    /// event log knows it by. A second Wander still running writes into the
+    /// same folder; its log has no end yet, and is no news. On the pool.
+    /// </summary>
+    private static void WarnIfLastSessionDied() {
+        string? current = ServiceLocator.TryGet<ILogFile>()?.FilePath;
+        _ = Task.Run(() => {
+            try {
+                var last = new DirectoryInfo(AppPaths.Logs).EnumerateFiles("session-*.log")
+                    .Where(f => !string.Equals(f.FullName, current, StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(f => f.LastWriteTimeUtc)
+                    .FirstOrDefault();
+                if (last is null || SessionEnd.IsIn(TailOf(last.FullName))) {
+                    return;
+                }
+
+                int? pid = SessionEnd.PidOf(last.Name);
+                if (pid is { } id && IsWanderRunning(id)) {
+                    return;
+                }
+                Log.Warn($"Previous session ended without a word: pid {pid?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}, " +
+                    $"last written {last.LastWriteTime:yyyy-MM-dd HH:mm:ss} ({last.Name})");
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                // No folder yet, or the log held shut: nothing to say.
+            }
+        });
+    }
+
+    private static string TailOf(string path) {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        stream.Seek(Math.Max(0, stream.Length - LogTailBytes), SeekOrigin.Begin);
+        using var reader = new StreamReader(stream);
+
+        return reader.ReadToEnd();
+    }
+
+    private static bool IsWanderRunning(int pid) {
+        try {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            using var self = System.Diagnostics.Process.GetCurrentProcess();
+
+            return string.Equals(process.ProcessName, self.ProcessName, StringComparison.OrdinalIgnoreCase);
+        } catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) {
+            // Not running.
+            return false;
+        }
+    }
+
+
+    /// <summary>
     /// Whether this fault may raise the crash-report dialog now. The fatal
     /// handler does not ask: that process is going down, and its one report
     /// is the only one there will be.
@@ -343,21 +430,37 @@ public partial class App : Application {
 
         DispatcherUnhandledException += (_, args) => {
             log.Error("Unhandled dispatcher exception", args.Exception);
-            // No dialog under --smoke: nobody is there to dismiss it, and a
-            // check that hangs on a message box is worse than one that fails.
-            // The exit code carries the news instead.
-            if (Headless) {
-                args.Handled = true;
-                StopOperationsBeforeDying(log);
-                ShutdownWithoutAsking(1);
+            switch (UiFault.Answer(IsShuttingDown, Dispatcher.HasShutdownStarted, Headless)) {
+                case UiFaultAnswer.Exit:
+                    // On the way out: swallowed, it left a process with no
+                    // window for hours (audit L3). No report - the window
+                    // is gone; the log has the stack.
+                    args.Handled = true;
+                    StopOperationsBeforeDying(log);
+                    EndSession(SessionEnd.ExitCrash, 1);
+                    Environment.Exit(1);
 
-                return;
-            }
+                    return;
 
-            if (ShouldOffer("Unhandled dispatcher exception", args.Exception, DateTime.UtcNow)) {
-                CrashReporter.Offer(args.Exception, fatal: false);
+                case UiFaultAnswer.ShutDown:
+                    // No dialog under --smoke: nobody is there to dismiss it,
+                    // and a check that hangs on a message box is worse than
+                    // one that fails. The exit code carries the news instead.
+                    args.Handled = true;
+                    StopOperationsBeforeDying(log);
+                    _endReason = SessionEnd.Fatal;
+                    ShutdownWithoutAsking(1);
+
+                    return;
+
+                default:
+                    if (ShouldOffer("Unhandled dispatcher exception", args.Exception, DateTime.UtcNow)) {
+                        CrashReporter.Offer(args.Exception, fatal: false);
+                    }
+                    args.Handled = true;
+
+                    return;
             }
-            args.Handled = true;
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) => {
@@ -365,6 +468,7 @@ public partial class App : Application {
             var ex = args.ExceptionObject as Exception;
             log.Error($"Fatal unhandled exception (terminating={args.IsTerminating})", ex);
             StopOperationsBeforeDying(log);
+            EndSession(SessionEnd.Fatal, UnhandledExceptionExitCode);
             if (ex is not null && !Headless) {
                 CrashReporter.Offer(ex, fatal: true);
             }

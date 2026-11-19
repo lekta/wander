@@ -16,7 +16,11 @@ ARCHITECTURE; поведение и пределы — DONE «Ход файло�
   `MoveAction.EnsureWayBack`;
 - откат созданного сайдкара → `CreatedSidecar.PlanUndo`, исполняет
   `CompanionMetadataService.UndoCreation`;
-- правленая временная копия → `TempExtraction.Judge` / `CopyOutAsync`.
+- правленая временная копия → `TempExtraction.Judge` / `CopyOutAsync`;
+- новое имя при переименовании → `FileOperationService.Checked`
+  (`RenamePlanner.TrimTail`, `IsValidName`); текст — `DescribeError`;
+- имя с устройства → `DevicePath.SafeName` / `DiskName`; пропуск —
+  `DeviceImportService.Weigh`, `WindowsShellNamespace.CopyOffDevice`.
 
 ## Файловые операции
 
@@ -579,7 +583,16 @@ VM / drop / hotkey → FileOperationService (фасад: одиночные ops 
   `GetEntry` до операции бросил — источник падает один с причиной. Сбой
   файла папки остальные не останавливает: папка `Failed` с первой
   ошибкой, «Повторить» сливает в уже скопированное; не вернувшееся
-  устройство — стоп. Временная копия просмотра и «Открыть» — `CopyOut` ветки
+  устройство — стоп. **Имена с устройства** — `DevicePath.SafeName`
+  (листинг) и `DiskName` (запись): знаки, запрещённые в имени Windows
+  (`\ / : * ? " < > |`, управляющие; на Android законны), — `_`, `C:` →
+  `C_`; имя пустое, `.` или `..` — запись пропускается: WARN, в обходе
+  папки — `BatchItemResult.SkippedNames` и хвост итога «пропущено с
+  именем не для диска N», выбранная сама — `Failed` с
+  `InvalidNameException`. `CopyOffDevice` (временная копия) — то же, WARN,
+  без итога. Правил имени три, не сводить: `IsValidName` — от человека
+  (отказ), `ZipCatalog.IsPlainName` — из архива (пропуск), `DiskName` —
+  с устройства (починка). Временная копия просмотра и «Открыть» — `CopyOut` ветки
   устройства, у RAW для просмотра — только голова файла (PREVIEW, «RAW
   с устройства»); миниатюры — `DeviceThumbnail`: у RAW — своя камеры
   (160 px, без поворота — поворот только в заголовке файла), после

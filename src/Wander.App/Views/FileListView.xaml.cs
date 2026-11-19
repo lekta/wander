@@ -2199,6 +2199,7 @@ public partial class FileListView : UserControl {
         box.PreviewKeyDown += RenameBox_PreviewKeyDown;
         box.PreviewTextInput += RenameBox_PreviewTextInput;
         box.LostKeyboardFocus += RenameBox_LostKeyboardFocus;
+        FileNameInput.FilterPastes(box, () => true, () => Vm.Status = Strings.InvalidFileNameChars + "\\ / : * ? \" < > |");
 
         return box;
     }

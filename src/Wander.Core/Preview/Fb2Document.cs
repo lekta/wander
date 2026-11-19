@@ -46,6 +46,13 @@ public static class Fb2Document {
     /// </summary>
     private const int ImageBudget = 6 * 1024 * 1024;
 
+    /// <summary>
+    /// Levels of elements the writer goes down. An unknown tag adds nothing
+    /// to the HTML, so the budget never stops <c>&lt;x&gt;&lt;x&gt;...</c>, and
+    /// a hundred thousand of them are a stack overflow nothing catches.
+    /// </summary>
+    private const int MaxDepth = 256;
+
 
     /// <summary>
     /// Reads a book. Returns null when the stream isn't well-formed XML or
@@ -76,16 +83,19 @@ public static class Fb2Document {
             .Where(s => s.Length > 0));
 
         var html = new StringBuilder();
-        WriteHeader(html, title, author, titleInfo, binaries);
-
         // Only the main body. FB2 puts footnotes in a second <body
         // name="notes">, and a preview that opens on the footnotes would
         // be answering a question nobody asked.
         var body = root.Elements().FirstOrDefault(e => Is(e, "body") && Attr(e, "name") is null)
             ?? root.Elements().FirstOrDefault(e => Is(e, "body"));
-
-        if (body is not null) {
-            WriteChildren(html, body, binaries, htmlBudget);
+        try {
+            WriteHeader(html, title, author, titleInfo, binaries);
+            if (body is not null) {
+                WriteChildren(html, body, binaries, htmlBudget, depth: 1);
+            }
+        } catch (FormatException) {
+            // Nested past MaxDepth: no book this reads.
+            return null;
         }
 
         // The budget is checked as the tree is walked, not between
@@ -264,7 +274,7 @@ public static class Fb2Document {
         var annotation = Child(titleInfo, "annotation");
         if (annotation is not null) {
             html.Append("<div class='fb2-annotation'>");
-            WriteChildren(html, annotation, binaries, int.MaxValue);
+            WriteChildren(html, annotation, binaries, int.MaxValue, depth: 1);
             html.Append("</div>");
         }
 
@@ -283,8 +293,10 @@ public static class Fb2Document {
     /// written out anyway: an unknown wrapper should cost its own tag, not
     /// the text inside it.
     /// </summary>
+    /// <param name="depth">How many elements down from the body or the annotation it is.</param>
+    /// <exception cref="FormatException">An element nested past <see cref="MaxDepth"/>.</exception>
     private static void WriteNode(
-        StringBuilder html, XNode node, Dictionary<string, string> binaries, int budget) {
+        StringBuilder html, XNode node, Dictionary<string, string> binaries, int budget, int depth) {
 
         if (node is XText text) {
             html.Append(Escape(text.Value));
@@ -294,6 +306,9 @@ public static class Fb2Document {
 
         if (node is not XElement element) {
             return;
+        }
+        if (depth > MaxDepth) {
+            throw new FormatException($"FB2 elements nested past {MaxDepth} levels");
         }
 
         switch (element.Name.LocalName) {
@@ -342,14 +357,14 @@ public static class Fb2Document {
         };
 
         if (tag is null) {
-            WriteChildren(html, element, binaries, budget);
+            WriteChildren(html, element, binaries, budget, depth + 1);
 
             return;
         }
 
         string close = tag.Split(' ')[0];
         html.Append('<').Append(tag).Append('>');
-        WriteChildren(html, element, binaries, budget);
+        WriteChildren(html, element, binaries, budget, depth + 1);
         html.Append("</").Append(close).Append('>');
     }
 
@@ -359,14 +374,15 @@ public static class Fb2Document {
     /// the way out, so what comes back is a whole fragment rather than one
     /// cut mid-tag.
     /// </summary>
+    /// <param name="depth">The children's: one for the body's own.</param>
     private static void WriteChildren(
-        StringBuilder html, XElement element, Dictionary<string, string> binaries, int budget) {
+        StringBuilder html, XElement element, Dictionary<string, string> binaries, int budget, int depth) {
 
         foreach (var child in element.Nodes()) {
             if (html.Length >= budget) {
                 return;
             }
-            WriteNode(html, child, binaries, budget);
+            WriteNode(html, child, binaries, budget, depth);
         }
     }
 

@@ -479,6 +479,30 @@ public class MeshFileTests {
     }
 
     [Fact]
+    public void Gltf_NodesNestedPastTheLimit_AreNoModel_RatherThanAStackOverflow() {
+        // A chain, not a cycle: "visited" lets it through, and ten thousand
+        // links take the process down.
+        string deep = TriangleGltfUnder(257);
+
+        Assert.NotNull(MeshFile.Read(Temp("shallow.gltf", Encoding.UTF8.GetBytes(TriangleGltfUnder(1)))));
+        Assert.Null(MeshFile.Read(Temp("deep.gltf", Encoding.UTF8.GetBytes(deep))));
+    }
+
+    [Fact]
+    public void Gltf_CutShort_IsNoModel_NotAnException() {
+        string whole = TriangleGltfUnder(1);
+
+        Assert.Null(Record.Exception(() => MeshFile.Read(Temp("cut.gltf", Encoding.UTF8.GetBytes(whole[..(whole.Length / 2)])))));
+    }
+
+    [Fact]
+    public void Gltf_AModeAsAString_IsNoModel_NotAnException() {
+        string json = TriangleGltfUnder(1).Replace("\"indices\":1}", "\"indices\":1,\"mode\":\"4\"}", StringComparison.Ordinal);
+
+        Assert.Null(Record.Exception(() => MeshFile.Read(Temp("mode.gltf", Encoding.UTF8.GetBytes(json)))));
+    }
+
+    [Fact]
     public void Gltf_BufferPointingOutsideItsFolder_IsNotFollowed() {
         string json = """
             {"asset":{"version":"2.0"},
@@ -705,6 +729,24 @@ public class MeshFileTests {
     }
 
     /// <summary>Pulls the two chunks back out, so the .gltf test can reuse the same JSON.</summary>
+    /// <summary>
+    /// The triangle as a <c>.gltf</c>, its blob a data: URI, its mesh on the
+    /// last of <paramref name="depth"/> nodes, each the only child of the one before.
+    /// </summary>
+    private static string TriangleGltfUnder(int depth) {
+        (string json, byte[] bin) = SplitGlb(Glb(Triangle(), translation: null));
+        var nodes = Enumerable.Range(0, depth)
+            .Select(i => i < depth - 1 ? "{\"children\":[" + (i + 1) + "]}" : "{\"mesh\":0}");
+        json = json.Replace("\"nodes\":[{\"mesh\":0}]", "\"nodes\":[" + string.Join(",", nodes) + "]", StringComparison.Ordinal);
+
+        int at = json.IndexOf("\"buffers\":[{", StringComparison.Ordinal);
+        int close = json.IndexOf('}', at);
+
+        return json[..close]
+            + ",\"uri\":\"data:application/octet-stream;base64," + Convert.ToBase64String(bin) + "\""
+            + json[close..];
+    }
+
     private static (string Json, byte[] Bin) SplitGlb(byte[] glb) {
         int jsonLength = (int)BinaryPrimitives.ReadUInt32LittleEndian(glb.AsSpan(12));
         string json = Encoding.UTF8.GetString(glb, 20, jsonLength).TrimEnd();

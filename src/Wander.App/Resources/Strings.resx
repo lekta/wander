@@ -636,6 +636,10 @@
     <value>в источнике осталось {0}</value>
     <comment>{0} — сколько файлов: перенос папки между дисками не забрал появившееся, изменённое за время копии и не удалившееся</comment>
   </data>
+  <data name="StatusBatchSkippedNames" xml:space="preserve">
+    <value>пропущено с именем не для диска {0}</value>
+    <comment>{0} — сколько записей с телефона или камеры не скопировано: имя «.» или «..»</comment>
+  </data>
   <data name="JournalItemLeftInSource" xml:space="preserve">
     <value>{0} — в источнике осталось {1}: появились или изменились за время копии, не удалились</value>
     <comment>{0} — имя папки, {1} — сколько файлов</comment>
@@ -987,6 +991,10 @@
   <data name="ErrorClaimedByOperation" xml:space="preserve">
     <value>«{0}» занят операцией Wander: {1}</value>
     <comment>{0} — имя, {1} — операция, которая держит файл («Копирование», «Откат»)</comment>
+  </data>
+  <data name="ErrorInvalidName" xml:space="preserve">
+    <value>«{0}» не может быть именем файла</value>
+    <comment>{0} — имя, как его ввели: «..\a.txt», «CON»</comment>
   </data>
   <data name="GuardDriveRoot" xml:space="preserve">
     <value>«{0}» — корень диска, его нельзя переместить или удалить</value>

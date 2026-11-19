@@ -21,6 +21,11 @@ namespace Wander.Core.FileSystem;
 public sealed record DevicePath(string Device, IReadOnlyList<string> Parts) {
     public const string Prefix = "device:";
 
+    /// <summary>What Windows allows in no name, whatever the device allows.</summary>
+    private static readonly char[] _forbidden = "\\/:*?\"<>|"
+        .Concat(Enumerable.Range(0, 32).Select(c => (char)c))
+        .ToArray();
+
 
     /// <summary>The device itself: what lists its storages.</summary>
     public bool IsRoot => Parts.Count == 0;
@@ -62,11 +67,40 @@ public sealed record DevicePath(string Device, IReadOnlyList<string> Parts) {
     }
 
     /// <summary>
-    /// A name made fit to be a part of a path: a device or a phone may call
-    /// something by a name with a separator in it, which a path would read
-    /// as two levels.
+    /// A name made fit to be a part of a path and a name on disk: a device
+    /// or a phone may call something by a name Windows forbids - a
+    /// separator, which a path would read as two levels; a colon, which
+    /// makes <c>C:</c> a drive to <see cref="Path.Combine(string, string)"/>;
+    /// <c>? * " &lt; &gt; |</c> and the control characters, all legal on
+    /// Android. Each becomes <c>_</c>.
     /// </summary>
     public static string SafeName(string name) {
-        return name.Replace('\\', '_').Replace('/', '_');
+        if (name.IndexOfAny(_forbidden) < 0) {
+            return name;
+        }
+
+        var safe = name.ToCharArray();
+        for (int i = 0; i < safe.Length; i++) {
+            if (Array.IndexOf(_forbidden, safe[i]) >= 0) {
+                safe[i] = '_';
+            }
+        }
+
+        return new string(safe);
+    }
+
+    /// <summary>
+    /// What an entry off a device is written under on disk - its
+    /// <see cref="SafeName"/> - or null for a name no underscore mends:
+    /// empty, <c>.</c> or <c>..</c> name a place, not a file, and the entry
+    /// is passed over. One of three name rules, not to be merged:
+    /// <c>RenamePlanner.IsValidName</c> refuses a name the user typed,
+    /// <c>ZipCatalog.IsPlainName</c> passes over one from an archive, this
+    /// one mends a device's.
+    /// </summary>
+    public static string? DiskName(string name) {
+        string safe = SafeName(name);
+
+        return safe is "" or "." or ".." ? null : safe;
     }
 }

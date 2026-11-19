@@ -126,7 +126,15 @@ public sealed class DeviceImportService {
                 continue;
             }
 
-            plans.Add(new Plan(i, entry, Path.Combine(targetFolder, entry.Name)));
+            if (DevicePath.DiskName(entry.Name) is not { } name) {
+                // ".." picked itself: nothing to write it as. Said as a
+                // failure of that item - it was asked for and is not there.
+                _log.Warn($"Import: {source} passed over - its name is no name on disk");
+                results[i] = new BatchItemResult(source, targetFolder, BatchItemStatus.Failed, new InvalidNameException(entry.Name));
+                continue;
+            }
+
+            plans.Add(new Plan(i, entry, Path.Combine(targetFolder, name)));
         }
 
         var restores = new List<IUndoableAction>();
@@ -256,6 +264,7 @@ public sealed class DeviceImportService {
                 } catch (Exception ex) when (ex is not OperationCanceledException) {
                     plan.Files.Clear();
                     plan.Folders.Clear();
+                    plan.SkippedNames = 0;
                     var after = await AfterError(plan.Source.FullPath, ex, operation, ct).ConfigureAwait(false);
                     if (after == DeviceAfter.Back) {
                         continue;
@@ -294,7 +303,15 @@ public sealed class DeviceImportService {
             var (from, to) = pending.Pop();
             plan.Folders.Add(to);
             foreach (var entry in _devices.Enumerate(from, ct)) {
-                string target = Path.Combine(to, entry.Name);
+                // A folder ".." from a phone would put what is in it a
+                // level above the target, and the one in it higher still.
+                if (DevicePath.DiskName(entry.Name) is not { } name) {
+                    _log.Warn($"Import: {entry.FullPath} passed over - its name is no name on disk");
+                    plan.SkippedNames++;
+                    continue;
+                }
+
+                string target = Path.Combine(to, name);
                 if (entry.Kind == EntryKind.Directory) {
                     pending.Push((entry.FullPath, target));
                 } else {
@@ -333,7 +350,8 @@ public sealed class DeviceImportService {
             deviceLost = outcome.DeviceLost;
             results[plan.Index] = new BatchItemResult(
                 plan.Source.FullPath, plan.Destination, outcome.Status, outcome.Error,
-                Attempts: outcome.Attempts, Verified: outcome.Verified, Engine: outcome.Copied ? CopyEngine.Own : CopyEngine.None);
+                Attempts: outcome.Attempts, Verified: outcome.Verified, Engine: outcome.Copied ? CopyEngine.Own : CopyEngine.None,
+                SkippedNames: plan.SkippedNames);
             operation.Advance(plan.Source.FullPath);
             _log.Info($"Import: {plan.Source.FullPath} -> {plan.Destination} [{outcome.Status}]");
         }
@@ -621,6 +639,9 @@ public sealed class DeviceImportService {
 
         /// <summary>The folders to make, the top one first.</summary>
         public List<string> Folders { get; } = new();
+
+        /// <summary>Entries in it passed over for a name no file on disk can take.</summary>
+        public int SkippedNames { get; set; }
     }
 
 

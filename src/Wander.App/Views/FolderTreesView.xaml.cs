@@ -861,6 +861,10 @@ public partial class FolderTreesView : UserControl {
         box.PreviewKeyDown += RenameBox_PreviewKeyDown;
         box.PreviewTextInput += RenameBox_PreviewTextInput;
         box.LostKeyboardFocus += RenameBox_LostKeyboardFocus;
+        // A bookmark's name is no file's, as for typing: "Work: Q3" pastes whole.
+        FileNameInput.FilterPastes(
+            box, () => box.DataContext is TreeNodeViewModel { Row.IsBookmarkRoot: false },
+            () => Vm.Status = Strings.InvalidFileNameChars + "\\ / : * ? \" < > |");
         _renamePane = pane;
         _renameBox = box;
         _renameLayer = layer;

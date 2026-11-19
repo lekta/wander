@@ -567,6 +567,9 @@
   <data name="StatusBatchLeftInSource" xml:space="preserve">
     <value>{0} left at the source</value>
   </data>
+  <data name="StatusBatchSkippedNames" xml:space="preserve">
+    <value>{0} skipped for a name no file can have</value>
+  </data>
   <data name="JournalItemLeftInSource" xml:space="preserve">
     <value>{0} — {1} left at the source: came or changed during the copy, would not go</value>
   </data>
@@ -887,6 +890,9 @@
   </data>
   <data name="ErrorClaimedByOperation" xml:space="preserve">
     <value>“{0}” is in use by a Wander operation: {1}</value>
+  </data>
+  <data name="ErrorInvalidName" xml:space="preserve">
+    <value>“{0}” can't be a file name</value>
   </data>
   <data name="GuardDriveRoot" xml:space="preserve">
     <value>“{0}” is a drive root and can't be moved or deleted</value>

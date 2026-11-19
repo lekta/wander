@@ -192,6 +192,9 @@ public static partial class Strings {
     /// <summary>отменено {0}</summary>
     public static string StatusBatchCancelled => Get(nameof(StatusBatchCancelled));
     public static string StatusBatchLeftInSource => Get(nameof(StatusBatchLeftInSource));
+
+    /// <summary>пропущено с именем не для диска {0}</summary>
+    public static string StatusBatchSkippedNames => Get(nameof(StatusBatchSkippedNames));
     public static string JournalItemLeftInSource => Get(nameof(JournalItemLeftInSource));
 
     /// <summary>с ошибкой {0}{1}</summary>
@@ -302,6 +305,9 @@ public static partial class Strings {
 
     /// <summary>«{0}» занят операцией Wander: {1}</summary>
     public static string ErrorClaimedByOperation => Get(nameof(ErrorClaimedByOperation));
+
+    /// <summary>«{0}» не может быть именем файла</summary>
+    public static string ErrorInvalidName => Get(nameof(ErrorInvalidName));
 
     /// <summary>Wander: {0}</summary>
     public static string HolderWander => Get(nameof(HolderWander));

@@ -6011,6 +6011,10 @@ public sealed class MainViewModel : ObservableObject {
         if (entry is null || string.IsNullOrWhiteSpace(newName)) {
             return;
         }
+        // "b.txt." lands as "b.txt" (Win32 drops the tail): the companions
+        // and the selection follow the name the file will have. A name of
+        // dots alone goes on as typed, for the operation to refuse.
+        newName = RenamePlanner.TrimTail(newName) is { Length: > 0 } trimmed ? trimmed : newName;
         if (newName == entry.Name) {
             return;
         }
@@ -6059,7 +6063,12 @@ public sealed class MainViewModel : ObservableObject {
                 Status = string.Format(Strings.StatusRenamedWithCompanions, plan.Count - 1);
             }
         } catch (Exception ex) {
-            _log.Error($"Rename failed: {entry.FullPath} -> {Log.Path(newName)}", ex);
+            // A name that is no name is what was typed, not a fault.
+            if (ex is InvalidNameException) {
+                _log.Info($"Rename refused: {entry.FullPath} -> {Log.Path(newName)} (not a name)");
+            } else {
+                _log.Error($"Rename failed: {entry.FullPath} -> {Log.Path(newName)}", ex);
+            }
             string reason = await Task.Run(() => DescribeError(ex, entry.FullPath));
             Fail(string.Format(Strings.StatusRenameFailed, reason));
         } finally {
@@ -6356,6 +6365,7 @@ public sealed class MainViewModel : ObservableObject {
     public async Task<string?> RenameFolderAsync(string path, string newName) {
         string folder = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         string? parent = Path.GetDirectoryName(folder);
+        newName = RenamePlanner.TrimTail(newName) is { Length: > 0 } trimmed ? trimmed : newName;
         if (string.IsNullOrWhiteSpace(newName) || string.IsNullOrEmpty(parent)
             || string.Equals(newName, Path.GetFileName(folder), StringComparison.Ordinal)) {
             return null;
@@ -6366,7 +6376,11 @@ public sealed class MainViewModel : ObservableObject {
             ReleasePreview(new[] { folder });
             await Task.Run(() => _ops.RenameMany(new[] { (folder, newName) }));
         } catch (Exception ex) {
-            _log.Error($"Rename failed: {folder} -> {Log.Path(newName)}", ex);
+            if (ex is InvalidNameException) {
+                _log.Info($"Rename refused: {folder} -> {Log.Path(newName)} (not a name)");
+            } else {
+                _log.Error($"Rename failed: {folder} -> {Log.Path(newName)}", ex);
+            }
             string reason = await Task.Run(() => DescribeError(ex, folder));
             Fail(string.Format(Strings.StatusRenameFailed, reason));
 
@@ -7178,6 +7192,11 @@ public sealed class MainViewModel : ObservableObject {
         if (left > 0) {
             tail.Add(string.Format(Strings.StatusBatchLeftInSource, left));
         }
+        // Off a device: entries named "." or ".." that no file on disk can be.
+        int unnamed = results.Sum(r => r.SkippedNames);
+        if (unnamed > 0) {
+            tail.Add(string.Format(Strings.StatusBatchSkippedNames, unnamed));
+        }
         // One item by its name, not "1 элемент" (AD5).
         var landed = results.Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged).ToList();
         string howMany = landed.Count == 1 ? Named(landed[0].FinalDestination, 1) : CountCaption.Items(ok);
@@ -7190,7 +7209,7 @@ public sealed class MainViewModel : ObservableObject {
         string waited = BusyNote(results.Select(r => r.Busy));
         var failures = results.Where(r => r.Status == BatchItemStatus.Failed).Select(r => r.Error).ToList();
         var severity = OutcomeSeverity(ok, failures, waited);
-        if (left > 0 && severity == StatusSeverity.Info) {
+        if ((left > 0 || unnamed > 0) && severity == StatusSeverity.Info) {
             severity = StatusSeverity.Warning;
         }
 
@@ -7384,6 +7403,9 @@ public sealed class MainViewModel : ObservableObject {
         if (ex is RecycleUnavailableException) {
             // The journal is the user's: it names the file, not only the reason.
             return string.Format(Strings.ErrorRecycleUnavailable, Path.GetFileName(path));
+        }
+        if (ex is InvalidNameException invalid) {
+            return string.Format(Strings.ErrorInvalidName, invalid.Name);
         }
         if (ex is ClaimedByOperationException claimed) {
             return string.Format(Strings.ErrorClaimedByOperation, Path.GetFileName(path), Strings.Get(claimed.Verb));

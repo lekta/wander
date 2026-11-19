@@ -62,6 +62,36 @@ public class FbxReaderTests {
         Assert.Contains(Corner(mesh, 11, 1, 0), Corners(mesh));
     }
 
+    [Theory]
+    [InlineData(256, true)]
+    [InlineData(257, false)]
+    public void Binary_NestedPastTheLimit_IsNoModel_RatherThanAStackOverflow(int depth, bool read) {
+        // Tens of thousands of levels fit in 100 KB of records and take the
+        // process down; 257 is enough to see the limit hold.
+        var file = new BinaryFbx(7400, false).Scene(upAxis: 1, chain: depth);
+
+        var mesh = MeshFile.Read(Temp("deep.fbx", file));
+
+        Assert.Equal(read, mesh is not null);
+    }
+
+    [Fact]
+    public void Text_NestedPastTheLimit_IsNoModel() {
+        const string scene = "; FBX 7.4.0 project file\n" +
+            "Objects:  {\n" +
+            "  Geometry: 100, \"Geometry::Quad\", \"Mesh\" {\n" +
+            "    Vertices: *12 {\n      a: 0,0,0,1,0,0,1,1,0,0,1,0\n    }\n" +
+            "    PolygonVertexIndex: *4 {\n      a: 0,1,2,-4\n    }\n" +
+            "  }\n" +
+            "  Model: 200, \"Model::Quad\", \"Mesh\" {\n  }\n" +
+            "}\n" +
+            "Connections:  {\n  C: \"OO\",100,200\n  C: \"OO\",200,0\n}\n";
+        string deep = string.Concat(Enumerable.Repeat("Deep: {\n", 257)) + string.Concat(Enumerable.Repeat("}\n", 257));
+
+        Assert.NotNull(MeshFile.Read(Temp("flat-text.fbx", Encoding.ASCII.GetBytes(scene))));
+        Assert.Null(MeshFile.Read(Temp("deep-text.fbx", Encoding.ASCII.GetBytes(scene + deep))));
+    }
+
     [Fact]
     public void CutShort_NeverThrows() {
         var whole = new BinaryFbx(7400, true).Scene(upAxis: 1);
@@ -187,9 +217,10 @@ public class FbxReaderTests {
         /// model 300 scaled by 2, material 400 red on the child. With a
         /// <paramref name="picture"/>: UVs on the quad, by corner through an
         /// index, texture 500 on the material's diffuse, its video 600
-        /// embedding the bytes.
+        /// embedding the bytes. With a <paramref name="chain"/>: a record that
+        /// many levels deep after the rest, each holding the next.
         /// </summary>
-        public byte[] Scene(int upAxis, byte[]? picture = null) {
+        public byte[] Scene(int upAxis, byte[]? picture = null, int chain = 0) {
             _out.AddRange(Encoding.ASCII.GetBytes("Kaydara FBX Binary  "));
             _out.Add(0);
             _out.Add(0x1A);
@@ -245,6 +276,7 @@ public class FbxReaderTests {
                     Node("C", new object[] { "OO", 600L, 500L });
                 }
             });
+            Chain(chain);
             End();
             // The footer a real file ends with: never read.
             _out.AddRange(new byte[160]);
@@ -287,6 +319,12 @@ public class FbxReaderTests {
 
         private void End() {
             _out.AddRange(new byte[Wide ? 25 : 13]);
+        }
+
+        private void Chain(int depth) {
+            if (depth > 0) {
+                Node("Deep", Array.Empty<object>(), () => Chain(depth - 1));
+            }
         }
 
         private void Property(object value) {

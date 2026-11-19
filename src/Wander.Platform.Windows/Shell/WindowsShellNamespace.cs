@@ -174,7 +174,14 @@ public sealed class WindowsShellNamespace : IShellNamespace {
         foreach (var item in items) {
             ct.ThrowIfCancellationRequested();
             var entry = _devices.GetEntry(item.Path) ?? throw new FileNotFoundException("Not on the device", item.Path);
-            Copy(fs, entry, Path.Combine(targetFolder, item.NewName ?? entry.Name), ct);
+            // The device's name is mended as an import mends it
+            // (DevicePath.DiskName): "C:" or ".." must not take the copy out
+            // of its scratch folder.
+            if ((item.NewName ?? DevicePath.DiskName(entry.Name)) is not { } name) {
+                _logger.Warn($"Device copy: {item.Path} passed over - its name is no name on disk");
+                continue;
+            }
+            Copy(fs, entry, Path.Combine(targetFolder, name), ct);
             progress?.Report(item.Path);
         }
     }
@@ -184,7 +191,11 @@ public sealed class WindowsShellNamespace : IShellNamespace {
         if (entry.Kind == EntryKind.Directory) {
             fs.CreateDirectory(destination);
             foreach (var child in _devices!.Enumerate(entry.FullPath, ct)) {
-                Copy(fs, child, Path.Combine(destination, child.Name), ct);
+                if (DevicePath.DiskName(child.Name) is not { } name) {
+                    _logger.Warn($"Device copy: {child.FullPath} passed over - its name is no name on disk");
+                    continue;
+                }
+                Copy(fs, child, Path.Combine(destination, name), ct);
             }
 
             return;

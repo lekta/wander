@@ -7,6 +7,12 @@
 таблица форматов для пользователя — GUIDE (`check-formats.ps1` сверяет
 её с кодом).
 
+Правки:
+- предел вложенности модели → `MaxDepth` в `FbxDocument`, `GltfReader`;
+  книги — `Fb2Document.MaxDepth`;
+- исключения разбора, что значат «не модель» → `MeshFile.Read`; сбой
+  загрузчика в панели → `PreviewController.UpdatePreviewAsync`.
+
 ## Конвейер
 
 `PreviewController` (App) — конвейер с отменой и спиннером. `PreviewPane`
@@ -530,7 +536,8 @@
   `UseAdvancedExtensions` — тянет iframe и `{#id .class}`).
 - **Книги**: `Fb2Document` (HTML-фрагмент, потоковый `ReadCover`,
   namespace по локальному имени, бюджет 400 000 по ходу обхода с закрытием
-  тегов, картинки `data:` до 6 МБ); `BookCover` (`.fb2`, `.epub`:
+  тегов, картинки `data:` до 6 МБ; вложенность глубже 256 — `Read` даёт
+  `null`: незнакомый тег бюджета не тратит); `BookCover` (`.fb2`, `.epub`:
   `container.xml` → OPF → манифест, EPUB 3 `cover-image` / EPUB 2
   `<meta name="cover">` / по имени; DjVu, CHM, `.doc` — нет).
 - **Подсветка кода**: AvalonEdit по расширению;
@@ -595,6 +602,16 @@ FBX (смещения и опоры поворота и масштаба, пре
 Эйлера) плюс геометрический сдвиг, цвет — `DiffuseColor` материала
 полигона, ось «вверх» из `GlobalSettings`. FBX 6, NURBS, скиннинг —
 нет; файл только с анимацией (без `Geometry`) — не модель, без предпросмотра. Камера — из радиуса описанной сферы.
+
+**Плохой файл — «нет просмотра», не падение.** Вложенность — предел 256
+(`FbxDocument` — записи и текст, `GltfReader.Walk` — цепочка узлов, не
+только цикл): дальше `FormatException`, его ловит `MeshFile.Read`;
+переполнение стека не ловится ничем, а FBX и glTF читаются и в
+миниатюрах. `ThreeMfReader.MaxDepth` (16, ветка подрезается молча) — не
+образец. `MeshFile.Read` ловит и `JsonException` (обрезанный `.gltf`) с
+`InvalidOperationException` (`"mode":"4"`). Исключение загрузчика мимо
+своего `catch` ловит `UpdatePreviewAsync`: ERROR со стеком, `Unsupported`
+и `ExplainUnreadableAsync`.
 
 **Текстуры** — только диффузная: OBJ `map_Kd` (опции `-bm`, `-s` …
 пропускаются), glTF `baseColorTexture` с `TEXCOORD_0` (картинка из

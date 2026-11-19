@@ -1167,9 +1167,15 @@ internal sealed class BatchExecutor {
 /// Moved off its volume, and these files stayed at the source - came or
 /// changed during the copy, would not go. The item is still <c>Ok</c>.
 /// </param>
+/// <param name="SkippedNames">
+/// Copied off a device, and this many entries in it were passed over: a
+/// name no file on disk can take (<see cref="DevicePath.DiskName"/>). Not
+/// <see cref="BatchItemStatus.Skipped"/>, which is a conflict answered.
+/// </param>
 public sealed record BatchItemResult(
     string Source, string FinalDestination, BatchItemStatus Status, Exception? Error, BusyReport? Busy = null, int Attempts = 1,
-    bool Verified = false, CopyEngine Engine = CopyEngine.None, IReadOnlyList<SourceLeftover>? LeftInSource = null);
+    bool Verified = false, CopyEngine Engine = CopyEngine.None, IReadOnlyList<SourceLeftover>? LeftInSource = null,
+    int SkippedNames = 0);
 
 /// <param name="Busy">The item was held and waited for - worth a line in the journal either way.</param>
 /// <param name="Permanent">

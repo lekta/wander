@@ -1,6 +1,7 @@
 using Wander.Core.Diagnostics;
 using Wander.Core.Logging;
 using Wander.Core.Operations;
+using Wander.Core.Rename;
 using Wander.Core.Undo;
 
 namespace Wander.Core.FileSystem;
@@ -155,6 +156,7 @@ public sealed class FileOperationService {
         if (string.IsNullOrWhiteSpace(newName)) {
             throw new ArgumentException("New name cannot be empty", nameof(newName));
         }
+        newName = Checked(newName);
         GuardDestructive(path);
         using var _ = _undo.BeginOperation();
         using var gate = _held.Begin(_log);
@@ -197,6 +199,8 @@ public sealed class FileOperationService {
             }
             GuardDestructive(path);
         }
+        // Checked here, not in RenameStep: a scratch name is ours, and longer.
+        renames = renames.Select(r => (r.Path, Checked(r.NewName))).ToList();
 
         using var _ = _undo.BeginOperation();
         // One wait for the call, not one a file: a hundred files held by a
@@ -320,6 +324,18 @@ public sealed class FileOperationService {
         }
     }
 
+
+    /// <summary>
+    /// A new name as Windows would give it - the dots and spaces at its end
+    /// dropped, as Win32 drops them - or a refusal: a separator, a drive,
+    /// <c>..</c> or <c>CON</c> would put the file somewhere else.
+    /// </summary>
+    /// <exception cref="InvalidNameException">Not a name a file can have.</exception>
+    private static string Checked(string newName) {
+        string trimmed = RenamePlanner.TrimTail(newName);
+
+        return RenamePlanner.IsValidName(trimmed) ? trimmed : throw new InvalidNameException(newName);
+    }
 
     private static void GuardDestructive(string path) {
         if (SystemPathGuard.IsProtected(path, out string reason)) {
