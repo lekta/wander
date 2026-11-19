@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using Wander.Core.FileSystem;
 using Wander.Core.Icons;
@@ -30,33 +31,77 @@ namespace Wander.Core.Shell;
 /// </para>
 /// </summary>
 public static class TempExtraction {
+    // Each copy made this session, by its path: its size and time as made.
+    // A copy that no longer matches was edited by whoever it was opened in
+    // (audit 2026-11-18, F4). In memory only - a copy from an earlier
+    // session has no record, and is replaced as before.
+    private static readonly ConcurrentDictionary<string, TempCopyStamp> _made = new(StringComparer.OrdinalIgnoreCase);
+
+
     /// <summary>
     /// Copies <paramref name="source"/> - a path inside an archive - into
-    /// <paramref name="tempFolder"/> and returns where it landed. An
-    /// earlier copy under the same name is replaced: the archive may have
-    /// been rebuilt since, and a stale copy would be shown as the current
-    /// one.
+    /// <paramref name="tempFolder"/> and says where it landed. An earlier
+    /// copy under the same name is replaced: the archive may have been
+    /// rebuilt since, and a stale copy would be shown as the current one.
+    /// One edited since this session made it is the user's work, not
+    /// scratch: it goes to the bin, not into oblivion, and the result says
+    /// so; a bin that will not take it stops the extraction, the copy kept.
     /// </summary>
-    public static async Task<string> CopyOutAsync(
-        IShellNamespace ns, IFileSystem fs, ILogger log,
+    public static async Task<TempCopy> CopyOutAsync(
+        IShellNamespace ns, IFileSystem fs, IRecycleBin bin, ILogger log,
         string source, string tempFolder, CancellationToken ct) {
 
         fs.CreateDirectory(tempFolder);
         string destination = Path.Combine(tempFolder, NameOf(source));
-        if (fs.FileExists(destination)) {
+        var state = StateOf(fs, destination);
+        if (state == TempCopyState.Edited) {
+            bin.Send(destination);
+            log.Info($"Extract (temporary copy): {destination} was edited since it was made - to the bin");
+        } else if (state != TempCopyState.Missing) {
             fs.DeleteFile(destination);
         }
+        // The copy the record was about is gone: a copy cut short below is
+        // not to be taken for it edited.
+        _made.TryRemove(destination, out _);
 
         await ns.CopyOut(new[] { new CopyOutItem(source) }, tempFolder, null, ct).ConfigureAwait(false);
+        if (StampOf(fs, destination) is { } made) {
+            _made[destination] = made;
+        }
         log.Info($"Extract (temporary copy): {source} -> {destination}");
 
-        return destination;
+        return new TempCopy(destination, state == TempCopyState.Edited);
     }
 
     /// <summary>The same, into the folder that belongs to this source.</summary>
-    public static Task<string> CopyOutAsync(
-        IShellNamespace ns, IFileSystem fs, ILogger log, string source, CancellationToken ct) {
-        return CopyOutAsync(ns, fs, log, source, TempFiles.FolderFor(source), ct);
+    public static Task<TempCopy> CopyOutAsync(
+        IShellNamespace ns, IFileSystem fs, IRecycleBin bin, ILogger log, string source, CancellationToken ct) {
+        return CopyOutAsync(ns, fs, bin, log, source, TempFiles.FolderFor(source), ct);
+    }
+
+    /// <summary>
+    /// Whether the copy at <paramref name="copyPath"/> is still the one this
+    /// session made (<see cref="Judge"/>) - what the preview pane asks before
+    /// it shows the copy instead of unpacking again.
+    /// </summary>
+    public static TempCopyState StateOf(IFileSystem fs, string copyPath) {
+        return Judge(_made.TryGetValue(copyPath, out var made) ? made : null, StampOf(fs, copyPath));
+    }
+
+    /// <summary>
+    /// A copy as it was made (<paramref name="recorded"/>, null - not made
+    /// this session) against the file there now (<paramref name="onDisk"/>,
+    /// null - none): as made, edited since, or nothing known of it.
+    /// </summary>
+    public static TempCopyState Judge(TempCopyStamp? recorded, TempCopyStamp? onDisk) {
+        if (onDisk is null) {
+            return TempCopyState.Missing;
+        }
+        if (recorded is null) {
+            return TempCopyState.Unrecorded;
+        }
+
+        return recorded == onDisk ? TempCopyState.Fresh : TempCopyState.Edited;
     }
 
     /// <summary>
@@ -110,7 +155,35 @@ public static class TempExtraction {
     }
 
 
+    private static TempCopyStamp? StampOf(IFileSystem fs, string path) {
+        return fs.GetEntry(path) is { Kind: EntryKind.File, Size: { } size } entry
+            ? new TempCopyStamp(size, entry.ModifiedUtc)
+            : null;
+    }
+
     private static string NameOf(string path) {
         return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
     }
 }
+
+
+/// <summary>A temporary copy's size and time of last change.</summary>
+public readonly record struct TempCopyStamp(long Size, DateTime ModifiedUtc);
+
+/// <summary>What a temporary copy is, before it is made again (<see cref="TempExtraction.Judge"/>).</summary>
+public enum TempCopyState {
+    /// <summary>No copy there.</summary>
+    Missing,
+    /// <summary>As this session made it.</summary>
+    Fresh,
+    /// <summary>Changed since this session made it: edited in whatever it was opened in.</summary>
+    Edited,
+    /// <summary>Not made this session - left by an earlier one; replaced as before.</summary>
+    Unrecorded,
+}
+
+/// <summary>
+/// Where a temporary copy landed, and whether an edited copy that was there
+/// went to the bin to make room (<see cref="TempExtraction.CopyOutAsync(IShellNamespace, IFileSystem, IRecycleBin, ILogger, string, string, CancellationToken)"/>).
+/// </summary>
+public sealed record TempCopy(string Path, bool EditedCopyBinned);

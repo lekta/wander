@@ -191,6 +191,8 @@ public static partial class Strings {
 
     /// <summary>отменено {0}</summary>
     public static string StatusBatchCancelled => Get(nameof(StatusBatchCancelled));
+    public static string StatusBatchLeftInSource => Get(nameof(StatusBatchLeftInSource));
+    public static string JournalItemLeftInSource => Get(nameof(JournalItemLeftInSource));
 
     /// <summary>с ошибкой {0}{1}</summary>
     public static string StatusBatchFailed => Get(nameof(StatusBatchFailed));
@@ -284,6 +286,7 @@ public static partial class Strings {
 
     /// <summary>ссылка на папку — не копируется</summary>
     public static string ErrorLinkNotCopied => Get(nameof(ErrorLinkNotCopied));
+    public static string ErrorMoveBackSourceNotEmpty => Get(nameof(ErrorMoveBackSourceNotEmpty));
 
     /// <summary>Извлечь {0}</summary>
     public static string ActionEjectDrive => Get(nameof(ActionEjectDrive));

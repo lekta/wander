@@ -294,12 +294,23 @@ internal class FakeFileSystem : IFileSystem {
             Files[destination] = data;
         }
 
+        if (LeftOnMove.TryGetValue(source, out var leftover) && Directories.Contains(source)) {
+            // A folder off its volume that kept some of its files: the copy
+            // is whole, the source stays with what was left.
+            Directories.Add(destination);
+
+            return CopyReport.None with { LeftInSource = leftover };
+        }
+
         if (Directories.Remove(source)) {
             Directories.Add(destination);
         }
 
         return CopyReport.None;
     }
+
+    /// <summary>Folders whose move leaves these files at the source - as one off its volume does when they changed during the copy.</summary>
+    public Dictionary<string, SourceLeftover[]> LeftOnMove { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Paths whose rename must fail — for exercising rollback paths.</summary>
     public HashSet<string> RenameFailures { get; } = new(StringComparer.OrdinalIgnoreCase);

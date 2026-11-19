@@ -570,6 +570,36 @@ public class CompanionMetadataServiceTests {
         Assert.False(fs.FileExists(created));
     }
 
+    [Fact]
+    public void CreateRatingSidecar_Undo_KeepsAFileAnEditorWroteInto() {
+        // IMG.xmp is the name Lightroom and ACR write too: a develop recipe
+        // that landed in the file Wander made outlives Ctrl+Z, without the
+        // stars Wander put there (audit 2026-11-18, F1).
+        var (service, fs, undo) = Build(pp3: null);
+        string created = service.CreateRatingSidecar(
+            @"C:\photos\IMG_1234.CR2", SidecarFormat.Xmp, RatingField.Rank, 5);
+        fs.Files[created] = Utf8(Text(fs.Files[created]).Replace(
+            "xmp:Rating=\"5\"", "xmp:Rating=\"5\"\n    crs:Exposure2012=\"+0.35\""));
+
+        undo.Undo();
+
+        Assert.True(fs.FileExists(created));
+        Assert.Contains("crs:Exposure2012", Text(fs.Files[created]));
+        Assert.Null(service.ReadRating(created)!.Rank);
+    }
+
+    [Fact]
+    public void CreateRatingSidecar_Undo_LeavesARatingTheEditorChanged() {
+        var (service, fs, undo) = Build(pp3: null);
+        string created = service.CreateRatingSidecar(
+            @"C:\photos\IMG_1234.CR2", SidecarFormat.Xmp, RatingField.Rank, 5);
+        fs.Files[created] = Utf8(Text(fs.Files[created]).Replace("xmp:Rating=\"5\"", "xmp:Rating=\"3\""));
+
+        undo.Undo();
+
+        Assert.Equal(3, service.ReadRating(created)!.Rank);
+    }
+
 
     // --- Many photos, one undo step -------------------------------------
 

@@ -1357,6 +1357,50 @@ public class BatchExecutorTests {
     }
 
     [Fact]
+    public async Task MoveManyAsync_AFolderThatLeftFilesAtTheSource_IsOk_WithWhatStayed_AndAnUndoStep() {
+        // Off its volume a folder move is a copy and a delete, and a file
+        // that came or changed during the copy stays where it is (audit
+        // 2026-11-18, F2/F3): the item went, the rest is named.
+        var (batch, fs, _, undo, _) = Setup();
+        fs.Directories.Add(@"C:\src\shoot");
+        fs.Directories.Add(@"E:\dst");
+        fs.Files[@"C:\src\shoot\new.jpg"] = new byte[] { 1 };
+        var left = new[] { new SourceLeftover(@"C:\src\shoot\new.jpg", LeftReason.Appeared) };
+        fs.LeftOnMove[@"C:\src\shoot"] = left;
+
+        var results = await batch.MoveManyAsync(new[] { @"C:\src\shoot" }, @"E:\dst", new FakeConflictResolver(), default);
+
+        var result = Assert.Single(results);
+        Assert.Equal(BatchItemStatus.Ok, result.Status);
+        Assert.Equal(left, result.LeftInSource);
+        Assert.Equal(1, undo.Depth);
+        Assert.Equal(OperationVerbs.Move, undo.Next!.Verb);
+    }
+
+    [Fact]
+    public async Task UndoOfAMoveThatLeftFiles_IsRefusedWhileTheSourceIsNotEmpty_AndStays() {
+        var fs = new FakeFileSystem();
+        var undo = new UndoService();
+        var tracker = new OperationTracker(TimeSpan.Zero);
+        var ops = new FileOperationService(
+            fs, new FakeRecycleBin(fs), undo, tracker, NullLogger.Instance,
+            new HeldPaths(new PathClaims(), newWait: () => new BusyWait(_ => { })));
+        fs.Directories.Add(@"C:\src\shoot");
+        fs.Directories.Add(@"E:\dst");
+        fs.Files[@"C:\src\shoot\new.jpg"] = new byte[] { 1 };
+        fs.LeftOnMove[@"C:\src\shoot"] = new[] { new SourceLeftover(@"C:\src\shoot\new.jpg", LeftReason.Appeared) };
+        await ops.MoveManyAsync(new[] { @"C:\src\shoot" }, @"E:\dst", new FakeConflictResolver(), default);
+        fs.CallLog.Clear();
+
+        var outcome = await undo.UndoAsync(tracker, default, null, ops.UndoGate);
+
+        var refused = Assert.IsType<SourceNotEmptyException>(Assert.Single(outcome!.Failures).Error);
+        Assert.Equal((@"C:\src\shoot", 1), (refused.Folder, refused.Left));
+        Assert.DoesNotContain(fs.CallLog, call => call.StartsWith("MoveEntry", StringComparison.Ordinal));
+        Assert.Equal(1, undo.Depth);
+    }
+
+    [Fact]
     public void MoveMany_ACompanionThatFails_TakesTheMovedMainFileBack() {
         var (batch, fs, _, undo, _) = Setup();
         fs.Files[@"C:\src\IMG.CR3"] = new byte[] { 1 };

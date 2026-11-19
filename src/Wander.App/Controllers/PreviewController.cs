@@ -2615,13 +2615,16 @@ public sealed class PreviewController : ObservableObject {
     /// </para>
     /// </summary>
     private async Task<string?> ArchiveEntryCopyAsync(FileSystemEntry entry, CancellationToken ct) {
-        // A copy is reused when its size matches the entry, and also when
-        // the listing gave no size to match against - RAR entries through
-        // the shell come without one, and unpacking them again on every
-        // pass is what starved the pool. The copy is a day old at most.
+        // A copy is reused when it is still the one this session made - its
+        // size and time as recorded, not edited in whatever "Open" handed it
+        // to (audit 2026-11-18, F4) - and its size matches the entry, or the
+        // listing gave no size to match against: RAR entries through the
+        // shell come without one, and unpacking them again on every pass is
+        // what starved the pool.
         string expected = TempExtraction.CopyPathFor(entry.FullPath);
         long onDisk = SizeOnDisk(expected);
-        if (onDisk >= 0 && (entry.Size is null || entry.Size == onDisk)) {
+        if (onDisk >= 0 && (entry.Size is null || entry.Size == onDisk)
+            && TempExtraction.StateOf(ServiceLocator.Get<IFileSystem>(), expected) == TempCopyState.Fresh) {
             return expected;
         }
 
@@ -2696,7 +2699,10 @@ public sealed class PreviewController : ObservableObject {
     private async Task<string> UnpackThroughGateAsync(IShellNamespace ns, ILogger log, string source, CancellationToken ct) {
         await _archiveCopyGate.WaitAsync(ct);
         try {
-            return await TempExtraction.CopyOutAsync(ns, ServiceLocator.Get<IFileSystem>(), log, source, ct);
+            var copy = await TempExtraction.CopyOutAsync(
+                ns, ServiceLocator.Get<IFileSystem>(), ServiceLocator.Get<IRecycleBin>(), log, source, ct);
+
+            return copy.Path;
         } finally {
             _archiveCopyGate.Release();
         }

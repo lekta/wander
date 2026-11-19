@@ -25,8 +25,15 @@ internal sealed class FakeRecycleBin : IRecycleBin {
     public HashSet<string> Untraceable { get; } = new(StringComparer.OrdinalIgnoreCase);
 
 
+    /// <summary>Paths the bin will not take - a drive without one; nothing is touched.</summary>
+    public HashSet<string> Unavailable { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+
     public RecycleHandle Send(string path) {
         CallLog.Add($"Recycle:{path}");
+        if (Unavailable.Contains(path)) {
+            throw new RecycleUnavailableException(path, RecycleUnavailableReason.NoBin);
+        }
         if (InUseFor.TryGetValue(path, out int left) && left > 0) {
             if (left != int.MaxValue) {
                 InUseFor[path] = left - 1;

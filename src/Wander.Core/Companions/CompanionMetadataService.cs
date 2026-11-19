@@ -253,7 +253,9 @@ public sealed class CompanionMetadataService {
     /// <see cref="SetRating"/>'s job), the creation is logged, and undo
     /// removes the file rather than blanking it — undoing "give this photo
     /// a star" has to leave the folder exactly as it was, and a leftover
-    /// empty <c>.pp3</c> would not.
+    /// empty <c>.pp3</c> would not. Unless an editor has written into the
+    /// file since: then it stays, without what Wander put in it
+    /// (<see cref="CreatedSidecar"/>).
     /// </para>
     ///
     /// <para>
@@ -265,7 +267,7 @@ public sealed class CompanionMetadataService {
     public string CreateRatingSidecar(string mainPath, SidecarFormat format, RatingField field, int value) {
         return CreateRatingSidecar(
             mainPath, format, field == RatingField.Rank ? value : 0, field == RatingField.ColorLabel ? value : 0,
-            $"{field} = {value}", pushUndo: true);
+            $"{field} = {value}", pushUndo: true).Path;
     }
 
 
@@ -332,13 +334,13 @@ public sealed class CompanionMetadataService {
                     }
                 } else {
                     var own = PhotoRating(photo);
-                    string created = CreateRatingSidecar(
+                    var created = CreateRatingSidecar(
                         photo.FullPath, createFormat,
                         field == RatingField.Rank ? value : own?.Rank ?? 0,
                         field == RatingField.ColorLabel ? value : own?.ColorLabel ?? 0,
                         $"{field} = {value}", pushUndo: false);
-                    steps.Add(new SidecarCreatedAction(this, created, photo.FullPath));
-                    sidecars = new[] { created };
+                    steps.Add(created);
+                    sidecars = new[] { created.Path };
                 }
                 touched.Add(photo.Name);
 
@@ -364,14 +366,43 @@ public sealed class CompanionMetadataService {
     }
 
 
-    /// <summary>Undo of a creation: the file goes away again.</summary>
-    internal void DeleteSidecar(string path) {
+    /// <summary>
+    /// Undo of a creation: the file goes away again - when it still holds
+    /// what was written. One an editor has written into since stays, and
+    /// loses only the fields still holding Wander's values, the same way the
+    /// undo of an edit takes them out (<see cref="CreatedSidecar.PlanUndo"/>).
+    /// </summary>
+    internal void UndoCreation(string path, CreatedSidecar written) {
         if (!_fs.FileExists(path)) {
             return;
         }
 
-        _fs.DeleteFile(path);
-        _log.Info($"Sidecar removed: {path}");
+        byte[] current = _fs.ReadAllBytes(path);
+        SidecarRating? read;
+        try {
+            read = IsPp3(path) ? Pp3Sidecar.Read(current) : XmpSidecar.Read(current);
+        } catch (Exception ex) {
+            _log.Warn($"Sidecar changed since it was created and does not read, left as it is: {path} ({ex.Message})");
+
+            return;
+        }
+
+        var plan = written.PlanUndo(current, read);
+        if (plan.Delete) {
+            _fs.DeleteFile(path);
+            _log.Info($"Sidecar removed: {path}");
+
+            return;
+        }
+
+        _log.Info($"Sidecar changed since it was created, kept: {path} (taking out: {(plan.Strip.Count == 0 ? "nothing" : string.Join(", ", plan.Strip))})");
+        try {
+            foreach (var field in plan.Strip) {
+                ApplyRating(path, field, null);
+            }
+        } catch (NotSupportedException ex) {
+            _log.Warn($"Sidecar changed since it was created and does not read, left as it is: {path} ({ex.Message})");
+        }
     }
 
 
@@ -459,7 +490,7 @@ public sealed class CompanionMetadataService {
     /// <see cref="ApplyRatingToMany"/>. The step still exists, it is just
     /// pushed by somebody else.
     /// </param>
-    private string CreateRatingSidecar(
+    private SidecarCreatedAction CreateRatingSidecar(
         string mainPath, SidecarFormat format, int rank, int color, string what, bool pushUndo) {
         string path = SidecarPathFor(mainPath, format);
         if (_fs.FileExists(path)) {
@@ -481,11 +512,12 @@ public sealed class CompanionMetadataService {
 
         _fs.ReplaceAtomic(path, content);
         _log.Info($"Sidecar created: {path} ({what})");
+        var step = new SidecarCreatedAction(this, path, mainPath, CreatedSidecar.Of(content, rank, color));
         if (pushUndo) {
-            _undo.Push(new SidecarCreatedAction(this, path, mainPath));
+            _undo.Push(step);
         }
 
-        return path;
+        return step;
     }
 
 
@@ -534,12 +566,13 @@ public sealed class CompanionMetadataService {
 
 
 /// <summary>
-/// Undo of creating a sidecar — delete the file that was created. Nothing
-/// is kept from it: it held one rating and nothing else, which is exactly
-/// what makes throwing it away the honest inverse.
+/// Undo of creating a sidecar — delete the file that was created, while it
+/// holds what was written and nothing else. A file an editor has written
+/// into since is the editor's: it stays, without Wander's fields
+/// (<see cref="CreatedSidecar"/>).
 /// </summary>
 internal sealed record SidecarCreatedAction(
-    CompanionMetadataService Service, string Path, string MainPath) : IUndoableAction {
+    CompanionMetadataService Service, string Path, string MainPath, CreatedSidecar Written) : IUndoableAction {
 
     public string Description => $"Sidecar '{System.IO.Path.GetFileName(Path)}'";
 
@@ -557,7 +590,7 @@ internal sealed record SidecarCreatedAction(
 
 
     public void Undo() {
-        Service.DeleteSidecar(Path);
+        Service.UndoCreation(Path, Written);
     }
 }
 

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Wander.Core.Logging;
 using Wander.Core.Persistence;
 
 namespace Wander.Platform.Windows.Persistence;
@@ -13,7 +14,7 @@ public sealed class JsonAppStateStore : IAppStateStore {
         Converters = { new JsonStringEnumConverter() },
     };
 
-    private readonly string _filePath;
+    private readonly JsonDataFile _file;
     private readonly InstanceLock _owner;
 
 
@@ -22,27 +23,24 @@ public sealed class JsonAppStateStore : IAppStateStore {
     /// every write, never before a read: a yielding instance still starts
     /// from the state the owner saved.
     /// </param>
-    public JsonAppStateStore(InstanceLock owner) {
+    public JsonAppStateStore(InstanceLock owner, ILogger log) {
         Directory.CreateDirectory(AppPaths.DataRoot);
-        _filePath = AppPaths.StateFile;
+        _file = new JsonDataFile(AppPaths.StateFile, log, AppState.CurrentVersion);
         _owner = owner;
     }
 
 
     public bool IsReadOnly => _owner.IsYielding;
 
+    public StoreReadOutcome LastLoad => _file.LastOutcome;
 
+
+    /// <summary>
+    /// The file, or the defaults when there is none to use. One that did not
+    /// read is not written over as it is (<see cref="JsonDataFile"/>).
+    /// </summary>
     public AppState Load() {
-        if (!File.Exists(_filePath)) {
-            return new AppState();
-        }
-
-        try {
-            string json = File.ReadAllText(_filePath);
-            return JsonSerializer.Deserialize<AppState>(json, _options) ?? new AppState();
-        } catch {
-            return new AppState();
-        }
+        return _file.Read<AppState>(_options) ?? new AppState();
     }
 
     /// <summary>
@@ -52,21 +50,14 @@ public sealed class JsonAppStateStore : IAppStateStore {
     /// Every caller does read-modify-write, so the record
     /// handed here carries the shape of the file it came from.
     /// </summary>
-    public void Save(AppState state) {
+    public bool Save(AppState state) {
         if (IsReadOnly || state.Version > AppState.CurrentVersion) {
-            return;
+            return false;
         }
 
-        try {
-            // Write-then-rename so a crash mid-write can't leave a truncated
-            // state.json — the old file stays intact until the new one is
-            // fully on disk.
-            string json = JsonSerializer.Serialize(state with { Version = AppState.CurrentVersion }, _options);
-            string tmpPath = _filePath + ".tmp";
-            File.WriteAllText(tmpPath, json);
-            File.Move(tmpPath, _filePath, overwrite: true);
-        } catch {
-            // best-effort: failure to persist must not crash the app
-        }
+        // Write-then-rename so a crash mid-write can't leave a truncated
+        // state.json — the old file stays intact until the new one is
+        // fully on disk. A failure is a WARN, never a crash.
+        return _file.Write(JsonSerializer.Serialize(state with { Version = AppState.CurrentVersion }, _options));
     }
 }

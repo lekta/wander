@@ -77,11 +77,11 @@ public static class PlatformBootstrapper {
                 ? "Started with --yield: the owning instance is running, state.json will not be written"
                 : "Started with --yield: no owning instance yet, state.json is written until one appears");
         }
-        ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore(owner));
-        ServiceLocator.Register<IFolderSettingsStore>(new JsonFolderSettingsStore(owner));
-        ServiceLocator.Register<IModelViews>(new JsonModelViewStore(owner));
-        ServiceLocator.Register<IBookmarkTitleStore>(new JsonBookmarkTitleStore(owner));
-        ServiceLocator.Register<IPinStore>(new JsonPinStore(owner));
+        ServiceLocator.Register<IAppStateStore>(new JsonAppStateStore(owner, logger));
+        ServiceLocator.Register<IFolderSettingsStore>(new JsonFolderSettingsStore(owner, logger));
+        ServiceLocator.Register<IModelViews>(new JsonModelViewStore(owner, logger));
+        ServiceLocator.Register<IBookmarkTitleStore>(new JsonBookmarkTitleStore(owner, logger));
+        ServiceLocator.Register<IPinStore>(new JsonPinStore(owner, logger));
         ServiceLocator.Register<IFileLockInspector>(new RestartManagerLockInspector());
         ServiceLocator.Register<IFileBusyProbe>(new WindowsFileBusyProbe());
         ServiceLocator.Register<IShortcutService>(new ShellShortcutService());

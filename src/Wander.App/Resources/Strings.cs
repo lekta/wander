@@ -407,6 +407,7 @@ public static partial class Strings {
 
     /// <summary>Открыта временная копия «{0}»; изменения в архив не попадут</summary>
     public static string StatusArchiveTempCopy => Get(nameof(StatusArchiveTempCopy));
+    public static string StatusTempCopyEditedBinned => Get(nameof(StatusTempCopyEditedBinned));
 
     /// <summary>Не извлечь: архив защищён паролем</summary>
     public static string StatusArchiveLocked => Get(nameof(StatusArchiveLocked));

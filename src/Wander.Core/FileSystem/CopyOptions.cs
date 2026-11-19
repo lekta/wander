@@ -24,7 +24,13 @@ public sealed record CopyOptions(bool Verify = false, bool SystemOnly = false) {
 /// left out: followed, one pointing above itself copies for ever. Null when
 /// there were none.
 /// </param>
-public readonly record struct CopyReport(CopyEngine Engine, bool Verified, IReadOnlyList<string>? SkippedLinks = null) {
+/// <param name="LeftInSource">
+/// A folder moved off its volume: the files that stayed at the source -
+/// came or changed during the copy, would not go (<see cref="SourceSweep"/>).
+/// Null when the source went whole.
+/// </param>
+public readonly record struct CopyReport(
+    CopyEngine Engine, bool Verified, IReadOnlyList<string>? SkippedLinks = null, IReadOnlyList<SourceLeftover>? LeftInSource = null) {
     /// <summary>Nothing was copied: a rename, an empty folder made.</summary>
     public static readonly CopyReport None = new(CopyEngine.None, false);
 
@@ -34,19 +40,25 @@ public readonly record struct CopyReport(CopyEngine Engine, bool Verified, IRead
     /// were, Windows' engine named when either went through it.
     /// </summary>
     public CopyReport And(CopyReport other) {
-        var links = SkippedLinks is null ? other.SkippedLinks
-            : other.SkippedLinks is null ? SkippedLinks
-            : SkippedLinks.Concat(other.SkippedLinks).ToList();
+        var links = Both(SkippedLinks, other.SkippedLinks);
+        var left = Both(LeftInSource, other.LeftInSource);
         if (Engine == CopyEngine.None) {
-            return other with { SkippedLinks = links };
+            return other with { SkippedLinks = links, LeftInSource = left };
         }
         if (other.Engine == CopyEngine.None) {
-            return this with { SkippedLinks = links };
+            return this with { SkippedLinks = links, LeftInSource = left };
         }
 
         var engine = Engine == CopyEngine.System || other.Engine == CopyEngine.System ? CopyEngine.System : CopyEngine.Own;
 
-        return new CopyReport(engine, Verified && other.Verified, links);
+        return new CopyReport(engine, Verified && other.Verified, links, left);
+    }
+
+
+    private static IReadOnlyList<T>? Both<T>(IReadOnlyList<T>? one, IReadOnlyList<T>? other) {
+        return one is null ? other
+            : other is null ? one
+            : one.Concat(other).ToList();
     }
 }
 
@@ -82,6 +94,28 @@ public sealed class LinkNotCopiedException : IOException {
 
 
     public string LinkPath { get; }
+}
+
+
+/// <summary>
+/// The undo of a folder moved off its volume that left files at the source
+/// (<see cref="CopyReport.LeftInSource"/>), refused: the folder it would go
+/// back into is there and not empty, and pouring the copy into it is a merge
+/// the undo does not do. Nothing on disk was touched; the step stays, and
+/// goes once the folder is cleared.
+/// </summary>
+public sealed class SourceNotEmptyException : IOException {
+    public SourceNotEmptyException(string folder, int left)
+        : base($"Not moved back: {folder} is there and not empty, {left} left in it by the move") {
+        Folder = folder;
+        Left = left;
+    }
+
+
+    public string Folder { get; }
+
+    /// <summary>How many of the files the move left behind are still there.</summary>
+    public int Left { get; }
 }
 
 

@@ -459,11 +459,65 @@ public class ExtractionServiceTests {
     public async Task ExtractToTemp_WritesTheCopy_AndLeavesNoUndoStep() {
         var (service, _, fs, _, undo) = Setup();
 
-        string copy = await service.ExtractToTempAsync(InnerReadme, @"C:\tmp\abcd", CancellationToken.None);
+        var copy = await service.ExtractToTempAsync(InnerReadme, @"C:\tmp\abcd", CancellationToken.None);
 
-        Assert.Equal(@"C:\tmp\abcd\readme.txt", copy);
-        Assert.True(fs.FileExists(copy));
+        Assert.Equal(@"C:\tmp\abcd\readme.txt", copy.Path);
+        Assert.True(fs.FileExists(copy.Path));
         Assert.Equal(0, undo.Depth);
+    }
+
+    [Fact]
+    public async Task ExtractToTemp_ACopyEditedSinceItWasMade_GoesToTheBin_AndAFreshOneTakesItsPlace() {
+        // notes.txt opened from a zip, edited and saved in the editor, then
+        // opened again: the edit is the user's, not scratch (audit 2026-11-18, F4).
+        var (service, _, fs, bin, _) = Setup();
+        var first = await service.ExtractToTempAsync(InnerReadme, @"C:\tmp\edit", CancellationToken.None);
+        fs.Files[first.Path] = "readme, edited"u8.ToArray();
+
+        var again = await service.ExtractToTempAsync(InnerReadme, @"C:\tmp\edit", CancellationToken.None);
+
+        Assert.Equal(first.Path, again.Path);
+        Assert.True(again.EditedCopyBinned);
+        Assert.Contains($"Recycle:{first.Path}", bin.CallLog);
+        Assert.Equal("readme", System.Text.Encoding.UTF8.GetString(fs.Files[again.Path]));
+    }
+
+    [Fact]
+    public async Task ExtractToTemp_ACopyAsItWasMade_IsSimplyMadeAgain() {
+        var (service, _, fs, bin, _) = Setup();
+        await service.ExtractToTempAsync(InnerReadme, @"C:\tmp\same", CancellationToken.None);
+
+        var again = await service.ExtractToTempAsync(InnerReadme, @"C:\tmp\same", CancellationToken.None);
+
+        Assert.False(again.EditedCopyBinned);
+        Assert.Empty(bin.CallLog);
+        Assert.True(fs.FileExists(again.Path));
+    }
+
+    [Fact]
+    public async Task ExtractToTemp_ACopyFromAnEarlierSession_IsReplacedAsBefore() {
+        var (service, _, fs, bin, _) = Setup();
+        fs.Directories.Add(@"C:\tmp\old");
+        fs.Files[@"C:\tmp\old\readme.txt"] = "from yesterday"u8.ToArray();
+
+        var copy = await service.ExtractToTempAsync(InnerReadme, @"C:\tmp\old", CancellationToken.None);
+
+        Assert.False(copy.EditedCopyBinned);
+        Assert.Empty(bin.CallLog);
+        Assert.Equal("readme", System.Text.Encoding.UTF8.GetString(fs.Files[copy.Path]));
+    }
+
+    [Fact]
+    public async Task ExtractToTemp_AnEditedCopyTheBinRefuses_StaysAndTheExtractionFails() {
+        var (service, _, fs, bin, _) = Setup();
+        var first = await service.ExtractToTempAsync(InnerReadme, @"C:\tmp\kept", CancellationToken.None);
+        fs.Files[first.Path] = "readme, edited"u8.ToArray();
+        bin.Unavailable.Add(first.Path);
+
+        await Assert.ThrowsAsync<RecycleUnavailableException>(
+            () => service.ExtractToTempAsync(InnerReadme, @"C:\tmp\kept", CancellationToken.None));
+
+        Assert.Equal("readme, edited", System.Text.Encoding.UTF8.GetString(fs.Files[first.Path]));
     }
 
 

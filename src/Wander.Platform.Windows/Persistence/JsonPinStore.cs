@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wander.Core.Logging;
 using Wander.Core.Persistence;
 using Wander.Core.Pins;
 
@@ -9,8 +10,8 @@ namespace Wander.Platform.Windows.Persistence;
 /// <see cref="IPinStore"/>. The same shape of caution as
 /// <see cref="JsonFolderSettingsStore"/> - write-then-rename, a yielding
 /// instance never writes, a file of a newer shape is read but not
-/// overwritten, a broken file reads as no pins - and its own
-/// <see cref="CurrentVersion"/>.
+/// overwritten, a file that did not read is not written over as it is
+/// (<see cref="JsonDataFile"/>) - and its own <see cref="CurrentVersion"/>.
 /// </summary>
 public sealed class JsonPinStore : IPinStore {
     /// <summary>The shape of the file; goes up when an older build would misread or drop what a newer one wrote.</summary>
@@ -20,17 +21,13 @@ public sealed class JsonPinStore : IPinStore {
         WriteIndented = true,
     };
 
-    private readonly string _filePath;
+    private readonly JsonDataFile _file;
     private readonly InstanceLock _owner;
 
-    // The version of the file as loaded; a newer one than this build knows
-    // is left alone on Save.
-    private int _fileVersion;
 
-
-    public JsonPinStore(InstanceLock owner) {
+    public JsonPinStore(InstanceLock owner, ILogger log) {
         Directory.CreateDirectory(AppPaths.DataRoot);
-        _filePath = AppPaths.PinsFile;
+        _file = new JsonDataFile(AppPaths.PinsFile, log, CurrentVersion);
         _owner = owner;
     }
 
@@ -39,39 +36,17 @@ public sealed class JsonPinStore : IPinStore {
 
 
     public IReadOnlyList<PinFolder> Load() {
-        if (!File.Exists(_filePath)) {
-            return Array.Empty<PinFolder>();
-        }
-
-        try {
-            string json = File.ReadAllText(_filePath);
-            var file = JsonSerializer.Deserialize<PinsFile>(json, _options);
-            if (file is null) {
-                return Array.Empty<PinFolder>();
-            }
-            _fileVersion = file.Version;
-
-            return file.Folders ?? Array.Empty<PinFolder>();
-        } catch {
-            return Array.Empty<PinFolder>();
-        }
+        return _file.Read<PinsFile>(_options)?.Folders ?? Array.Empty<PinFolder>();
     }
 
     public void Save(IReadOnlyList<PinFolder> folders) {
-        if (IsReadOnly || _fileVersion > CurrentVersion) {
+        if (IsReadOnly) {
             return;
         }
 
-        try {
-            string json = JsonSerializer.Serialize(new PinsFile(CurrentVersion, folders), _options);
-            string tmpPath = _filePath + ".tmp";
-            File.WriteAllText(tmpPath, json);
-            File.Move(tmpPath, _filePath, overwrite: true);
-            _fileVersion = CurrentVersion;
-        } catch {
-            // Best effort, like state.json: a pin that did not persist is
-            // not worth a crash.
-        }
+        // Best effort, like state.json: a pin that did not persist is a
+        // WARN, not a crash.
+        _file.Write(JsonSerializer.Serialize(new PinsFile(CurrentVersion, folders), _options));
     }
 
 

@@ -415,7 +415,7 @@ internal sealed class BatchExecutor {
 
         return failure is null
             ? (new BatchItemResult(primary.Source, primaryDest, primaryStatus, null, run.GroupBusy, run.GroupAttempts,
-                run.GroupCopy.Verified, run.GroupCopy.Engine), anyApplied)
+                run.GroupCopy.Verified, run.GroupCopy.Engine, run.GroupCopy.LeftInSource), anyApplied)
             : (new BatchItemResult(primary.Source, primaryDest, BatchItemStatus.Failed, failure, run.GroupBusy, run.GroupAttempts,
                 false, run.GroupCopy.Engine), anyApplied);
     }
@@ -476,6 +476,7 @@ internal sealed class BatchExecutor {
         }
 
         try {
+            move.EnsureWayBack();
             _fs.MoveEntry(move.NewPath, move.OldPath, bytes, run.Token, CopyOptionsFor(move.NewPath));
         } finally {
             if (size > 0) {
@@ -532,9 +533,17 @@ internal sealed class BatchExecutor {
 
             started = true;
             var copied = ApplyOne(src, dest, run);
+            // A folder moved off its volume may leave at the source what
+            // came or changed during the copy: the item went, and says so.
+            var left = copied.LeftInSource is { Count: > 0 } kept ? kept.Select(l => l.Path).ToList() : null;
             run.UndoSteps.Add(run.IsMove
-                ? new MoveAction(_fs, src, dest)
+                ? new MoveAction(_fs, src, dest, left)
                 : new CreateAction(_bin, dest, OperationVerbs.Copy));
+            if (left is not null) {
+                _log.Warn($"{run.Verb}: {src} -> {dest} - {left.Count} left at the source: "
+                    + string.Join(", ", copied.LeftInSource!.Take(5).Select(l => $"{l.Path} ({l.Reason})"))
+                    + (left.Count > 5 ? ", ..." : ""));
+            }
             var status = choice switch {
                 ConflictResolution.Replace => BatchItemStatus.Replaced,
                 ConflictResolution.Rename => BatchItemStatus.Renamed,
@@ -1154,9 +1163,13 @@ internal sealed class BatchExecutor {
 /// <param name="Attempts">How many tries it took: more than one after a transient error (<see cref="IoRetry"/>).</param>
 /// <param name="Verified">Every copy in it was read back and matched (<see cref="CopyOptions.Verify"/>).</param>
 /// <param name="Engine">What moved its bytes; <see cref="CopyEngine.None"/> for a rename.</param>
+/// <param name="LeftInSource">
+/// Moved off its volume, and these files stayed at the source - came or
+/// changed during the copy, would not go. The item is still <c>Ok</c>.
+/// </param>
 public sealed record BatchItemResult(
     string Source, string FinalDestination, BatchItemStatus Status, Exception? Error, BusyReport? Busy = null, int Attempts = 1,
-    bool Verified = false, CopyEngine Engine = CopyEngine.None);
+    bool Verified = false, CopyEngine Engine = CopyEngine.None, IReadOnlyList<SourceLeftover>? LeftInSource = null);
 
 /// <param name="Busy">The item was held and waited for - worth a line in the journal either way.</param>
 /// <param name="Permanent">

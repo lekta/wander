@@ -632,6 +632,14 @@
   <data name="StatusBatchCancelled" xml:space="preserve">
     <value>отменено {0}</value>
   </data>
+  <data name="StatusBatchLeftInSource" xml:space="preserve">
+    <value>в источнике осталось {0}</value>
+    <comment>{0} — сколько файлов: перенос папки между дисками не забрал появившееся, изменённое за время копии и не удалившееся</comment>
+  </data>
+  <data name="JournalItemLeftInSource" xml:space="preserve">
+    <value>{0} — в источнике осталось {1}: появились или изменились за время копии, не удалились</value>
+    <comment>{0} — имя папки, {1} — сколько файлов</comment>
+  </data>
   <data name="StatusBatchFailed" xml:space="preserve">
     <value>с ошибкой {0}{1}</value>
   </data>
@@ -955,6 +963,10 @@
   </data>
   <data name="ErrorLinkNotCopied" xml:space="preserve">
     <value>ссылка на папку — не копируется</value>
+  </data>
+  <data name="ErrorMoveBackSourceNotEmpty" xml:space="preserve">
+    <value>в «{0}» лежит оставшееся при переносе ({1}) — в непустую папку откат не возвращает</value>
+    <comment>{0} — имя папки, откуда переносили; {1} — сколько файлов там осталось</comment>
   </data>
   <data name="ActionEjectDrive" xml:space="preserve">
     <value>Извлечь {0}</value>
@@ -2305,6 +2317,10 @@
   </data>
   <data name="StatusArchiveTempCopy" xml:space="preserve">
     <value>Открыта временная копия «{0}»; изменения в архив не попадут</value>
+  </data>
+  <data name="StatusTempCopyEditedBinned" xml:space="preserve">
+    <value>прежняя копия с правками — в корзине</value>
+    <comment>Дописывается к StatusArchiveTempCopy / StatusDeviceTempCopy через «; »</comment>
   </data>
   <data name="StatusArchiveLocked" xml:space="preserve">
     <value>Не извлечь: архив защищён паролем</value>

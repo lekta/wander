@@ -214,13 +214,34 @@ public sealed class SystemIOFileSystem : IFileSystem {
     public CopyReport CopyDirectory(string source, string destination, bool overwrite,
         IProgress<long>? bytesCopied = null, CancellationToken ct = default, CopyOptions? options = null) {
 
+        return CopyDirectory(source, destination, overwrite, bytesCopied, ct, options, copied: null);
+    }
+
+    /// <param name="copied">
+    /// Told each file copied, with its size and time as they were before its
+    /// copy began - what the source of a move is swept by (<see cref="SourceSweep"/>).
+    /// </param>
+    private CopyReport CopyDirectory(string source, string destination, bool overwrite,
+        IProgress<long>? bytesCopied, CancellationToken ct, CopyOptions? options, List<SourceFile>? copied) {
+
         Directory.CreateDirectory(destination);
         var report = CopyReport.None;
 
         foreach (var file in Directory.EnumerateFiles(source)) {
             ct.ThrowIfCancellationRequested();
             var target = Path.Combine(destination, Path.GetFileName(file));
+            // Taken before the copy, and read now: FileInfo asks the disk on
+            // first use, and a file growing during its own copy must not be
+            // remembered as it is after it.
+            SourceFile? before = null;
+            if (copied is not null) {
+                var info = new FileInfo(file);
+                before = new SourceFile(file, info.Length, info.LastWriteTimeUtc);
+            }
             report = report.And(CopyFile(file, target, overwrite, bytesCopied, ct, options));
+            if (before is { } asCopied) {
+                copied!.Add(asCopied);
+            }
         }
 
         foreach (var dir in Directory.EnumerateDirectories(source)) {
@@ -234,7 +255,7 @@ public sealed class SystemIOFileSystem : IFileSystem {
             }
 
             var target = Path.Combine(destination, Path.GetFileName(dir));
-            report = report.And(CopyDirectory(dir, target, overwrite, bytesCopied, ct, options));
+            report = report.And(CopyDirectory(dir, target, overwrite, bytesCopied, ct, options, copied));
         }
 
         return report;
@@ -306,9 +327,10 @@ public sealed class SystemIOFileSystem : IFileSystem {
                 // take back - the source is still whole where it was - unless
                 // the folder was there before we started.
                 bool ours = !Directory.Exists(destination);
+                var copied = new List<SourceFile>();
                 CopyReport report;
                 try {
-                    report = CopyDirectory(source, destination, overwrite: false, bytesCopied, ct, options);
+                    report = CopyDirectory(source, destination, overwrite: false, bytesCopied, ct, options, copied);
                 } catch {
                     if (ours) {
                         TryDeleteDirectory(destination);
@@ -316,16 +338,10 @@ public sealed class SystemIOFileSystem : IFileSystem {
 
                     throw;
                 }
-                // A link the copy left out stays where it is, and so do the
-                // folders holding it: a recursive delete took it with the
-                // source, and it was in neither place.
-                if (report.SkippedLinks is { Count: > 0 }) {
-                    DeleteAllButLinks(source);
-                } else {
-                    Directory.Delete(source, recursive: true);
-                }
 
-                return report;
+                var left = SweepSource(source, copied);
+
+                return left.Count > 0 ? report with { LeftInSource = left } : report;
             }
         }
 
@@ -757,31 +773,97 @@ public sealed class SystemIOFileSystem : IFileSystem {
     }
 
     /// <summary>
-    /// The source of a folder moved off its volume whose copy left links to
-    /// folders out: what was copied goes, the links and the folders that
-    /// hold them stay. Undoing the move pours the rest back in around them.
+    /// The source of a folder moved off its volume, once the copy is whole:
+    /// the files <see cref="SourceSweep"/> says were copied as they are go,
+    /// one by one; the folders go without <c>recursive</c>, so one that kept
+    /// anything stays. What came or changed during the copy, a file that
+    /// would not go (held - not waited for), a link the copy left out and the
+    /// folders holding them stay where they are (audit 2026-11-18, F2/F3).
+    /// The read-only mark of a copied file is taken off without asking: the
+    /// file lives on, mark and all, at the destination.
     /// </summary>
-    /// <returns>True when the folder itself went - nothing in it was kept.</returns>
-    private static bool DeleteAllButLinks(string folder) {
-        foreach (string file in Directory.EnumerateFiles(folder)) {
-            File.Delete(file);
-        }
+    /// <returns>The files that stayed, and why.</returns>
+    private static List<SourceLeftover> SweepSource(string source, IReadOnlyList<SourceFile> copied) {
+        var now = new List<SourceFile>();
+        var unread = new List<string>();
+        FilesUnder(source, now, unread);
+        var plan = SourceSweep.Plan(copied, now);
 
-        bool kept = false;
-        foreach (string dir in Directory.EnumerateDirectories(folder)) {
-            if ((File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0) {
-                kept = true;
-                continue;
+        // A folder that would not be walked keeps everything in it: none of
+        // its files is in the list, so none goes.
+        var left = new List<SourceLeftover>(plan.Keep);
+        left.AddRange(unread.Select(folder => new SourceLeftover(folder, LeftReason.NotDeleted)));
+        foreach (string file in plan.Delete) {
+            try {
+                var attrs = File.GetAttributes(file);
+                if ((attrs & FileAttributes.ReadOnly) != 0) {
+                    File.SetAttributes(file, attrs & ~FileAttributes.ReadOnly);
+                }
+                File.Delete(file);
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+                left.Add(new SourceLeftover(file, LeftReason.NotDeleted));
             }
-            kept |= !DeleteAllButLinks(dir);
         }
-        if (kept) {
+        DeleteEmptyFolders(source);
+
+        return left;
+    }
+
+    /// <summary>
+    /// Every file under <paramref name="folder"/>, with its size and time;
+    /// links to folders are not walked into. A folder that cannot be walked
+    /// goes to <paramref name="unread"/>; a file gone since the listing is
+    /// simply not there.
+    /// </summary>
+    private static void FilesUnder(string folder, List<SourceFile> files, List<string> unread) {
+        try {
+            foreach (string file in Directory.EnumerateFiles(folder)) {
+                var info = new FileInfo(file);
+                info.Refresh();
+                if (info.Exists) {
+                    files.Add(new SourceFile(file, info.Length, info.LastWriteTimeUtc));
+                }
+            }
+            foreach (string dir in Directory.EnumerateDirectories(folder)) {
+                if ((File.GetAttributes(dir) & FileAttributes.ReparsePoint) == 0) {
+                    FilesUnder(dir, files, unread);
+                }
+            }
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            unread.Add(folder);
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="folder"/> and the folders under it that are empty,
+    /// deepest first, never <c>recursive</c>; a link to a folder is not
+    /// walked into or taken. One that will not go stays.
+    /// </summary>
+    /// <returns>True when the folder itself went.</returns>
+    private static bool DeleteEmptyFolders(string folder) {
+        try {
+            bool kept = false;
+            foreach (string dir in Directory.EnumerateDirectories(folder)) {
+                if ((File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0) {
+                    kept = true;
+                    continue;
+                }
+                kept |= !DeleteEmptyFolders(dir);
+            }
+            if (kept || Directory.EnumerateFileSystemEntries(folder).Any()) {
+                return false;
+            }
+
+            var info = new DirectoryInfo(folder);
+            if ((info.Attributes & FileAttributes.ReadOnly) != 0) {
+                info.Attributes &= ~FileAttributes.ReadOnly;
+            }
+            Directory.Delete(folder);
+
+            return true;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
             return false;
         }
-
-        Directory.Delete(folder);
-
-        return true;
     }
 
     /// <summary>The part-copied folder of a failed move, best effort - like <see cref="TryDelete"/>.</summary>

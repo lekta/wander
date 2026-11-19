@@ -11,6 +11,15 @@ public interface IAppStateStore {
     /// </summary>
     bool IsReadOnly { get; }
 
+    /// <summary>
+    /// How the last <see cref="Load"/> went: the defaults it gave are a first
+    /// start only when the file was <see cref="StoreReadOutcome.Missing"/>
+    /// (audit 2026-11-18, L8).
+    /// </summary>
+    StoreReadOutcome LastLoad { get; }
+
     AppState Load();
-    void Save(AppState state);
+
+    /// <returns>True when the file was written; false when this instance must not write it, or the write failed.</returns>
+    bool Save(AppState state);
 }

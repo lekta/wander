@@ -21,7 +21,7 @@ internal sealed class UndoStepGate : IUndoStepGate {
     }
 
     public bool WorthAnotherTry(Exception error) {
-        return FileInUse.Is(error) || error is ClaimedByOperationException || TransientIo.IsTransient(error);
+        return FileInUse.Is(error) || error is ClaimedByOperationException or SourceNotEmptyException || TransientIo.IsTransient(error);
     }
 
     public void Dispose() {

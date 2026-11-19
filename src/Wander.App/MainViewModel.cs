@@ -2875,7 +2875,14 @@ public sealed class MainViewModel : ObservableObject {
         // that allowed it): the bookmarks come back.
         _isDrivesExpanded = session.IsDrivesExpanded || !session.IsBookmarksExpanded;
         Raise(nameof(IsDrivesExpanded));
-        _log.Info($"State loaded: {DescribeSavedPanes()}{(_stateStore.IsReadOnly ? "; read-only, nothing will be written" : "")}");
+        // The defaults of a file that did not read are not a state loaded
+        // (audit 2026-11-18, L8): the store has said why in a WARN.
+        string loaded = _stateStore.LastLoad switch {
+            StoreReadOutcome.Read or StoreReadOutcome.Newer => DescribeSavedPanes(),
+            StoreReadOutcome.Missing => "no file, defaults",
+            var outcome => $"{outcome}, defaults",
+        };
+        _log.Info($"State loaded: {loaded}{(_stateStore.IsReadOnly ? "; read-only, nothing will be written" : "")}");
 
         // A remembered branch whose folder has gone opens as far as it
         // still goes; one on a medium that is not the machine's own stays
@@ -3051,7 +3058,7 @@ public sealed class MainViewModel : ObservableObject {
         if (!IsSearchResults && IsSamePath(_session.ListedPath, _nav.Current)) {
             _session.RememberSelection(null, place, _search.RatingFilter);
         }
-        _stateStore.Save(current with {
+        bool written = _stateStore.Save(current with {
             Session = new SessionState {
                 LastPath = _nav.Current is not null
                     ? new NavigationStop(_nav.Current, _nav.CurrentSource ?? NavigationSource.External)
@@ -3101,7 +3108,10 @@ public sealed class MainViewModel : ObservableObject {
         string panes = DescribeSavedPanes();
         if (panes != _lastWrittenPanes) {
             _lastWrittenPanes = panes;
-            _log.Info($"State written{(_stateStore.IsReadOnly ? " (not really: read-only)" : "")}: {panes}");
+            string really = written ? ""
+                : _stateStore.IsReadOnly ? " (not really: read-only)"
+                : " (not really: the store's WARN says why)";
+            _log.Info($"State written{really}: {panes}");
         }
     }
 
@@ -7045,14 +7055,19 @@ public sealed class MainViewModel : ObservableObject {
 
         var service = new ExtractionService(ns, _fs, ServiceLocator.Get<IRecycleBin>(), _undo, _tracker, _log);
         try {
-            string copy = await service.ExtractToTempAsync(path, TempFiles.FolderFor(path), CancellationToken.None);
-            _shell.Open(copy);
+            var copy = await service.ExtractToTempAsync(path, TempFiles.FolderFor(path), CancellationToken.None);
+            _shell.Open(copy.Path);
             // Said in the words of where it came from: a copy off a phone
             // goes back to the phone no more than one out of an archive.
             bool device = DevicePath.Is(path);
-            Say(string.Format(device ? Strings.StatusDeviceTempCopy : Strings.StatusArchiveTempCopy, Path.GetFileName(copy)),
-                StatusSeverity.Info, new JournalEntry(DateTime.Now, JournalKind.FileOpened,
-                    string.Format(device ? Strings.JournalDeviceCopyOpened : Strings.JournalArchiveCopyOpened, path), new[] { copy }));
+            string said = string.Format(device ? Strings.StatusDeviceTempCopy : Strings.StatusArchiveTempCopy, Path.GetFileName(copy.Path));
+            // The copy opened before had been edited: it is in the bin, not gone.
+            if (copy.EditedCopyBinned) {
+                said += "; " + Strings.StatusTempCopyEditedBinned;
+            }
+            Say(said,
+                copy.EditedCopyBinned ? StatusSeverity.Warning : StatusSeverity.Info, new JournalEntry(DateTime.Now, JournalKind.FileOpened,
+                    string.Format(device ? Strings.JournalDeviceCopyOpened : Strings.JournalArchiveCopyOpened, path), new[] { copy.Path }));
         } catch (Exception ex) {
             _log.Error($"Open from a container failed: {path}", ex);
             Fail(string.Format(Strings.StatusOpenFailed, DescribeError(ex, path)));
@@ -7157,6 +7172,12 @@ public sealed class MainViewModel : ObservableObject {
         if (cancelled > 0) {
             tail.Add(string.Format(Strings.StatusBatchCancelled, cancelled));
         }
+        // A folder moved off its volume that left at the source what came
+        // or changed during the copy: moved, and the rest named.
+        int left = results.Sum(r => r.LeftInSource?.Count ?? 0);
+        if (left > 0) {
+            tail.Add(string.Format(Strings.StatusBatchLeftInSource, left));
+        }
         // One item by its name, not "1 элемент" (AD5).
         var landed = results.Where(r => r.Status is BatchItemStatus.Ok or BatchItemStatus.Replaced or BatchItemStatus.Renamed or BatchItemStatus.Merged).ToList();
         string howMany = landed.Count == 1 ? Named(landed[0].FinalDestination, 1) : CountCaption.Items(ok);
@@ -7169,6 +7190,9 @@ public sealed class MainViewModel : ObservableObject {
         string waited = BusyNote(results.Select(r => r.Busy));
         var failures = results.Where(r => r.Status == BatchItemStatus.Failed).Select(r => r.Error).ToList();
         var severity = OutcomeSeverity(ok, failures, waited);
+        if (left > 0 && severity == StatusSeverity.Info) {
+            severity = StatusSeverity.Warning;
+        }
 
         var record = operationId == 0 ? null : _tracker.Finished.FirstOrDefault(r => r.Id == operationId);
         var summary = new List<string> { howMany };
@@ -7206,6 +7230,7 @@ public sealed class MainViewModel : ObservableObject {
                 BatchItemStatus.Skipped => string.Format(Strings.JournalItemSkipped, name),
                 BatchItemStatus.Cancelled => string.Format(Strings.JournalItemCancelled, name),
                 BatchItemStatus.Failed => string.Format(Strings.JournalItemFailed, name, reason ?? result.Error?.Message ?? ""),
+                _ when result.LeftInSource is { Count: > 0 } left => string.Format(Strings.JournalItemLeftInSource, name, left.Count),
                 _ => name,
             });
         }
@@ -7352,6 +7377,9 @@ public sealed class MainViewModel : ObservableObject {
         }
         if (ex is LinkNotCopiedException) {
             return Strings.ErrorLinkNotCopied;
+        }
+        if (ex is SourceNotEmptyException notEmpty) {
+            return string.Format(Strings.ErrorMoveBackSourceNotEmpty, Path.GetFileName(notEmpty.Folder), notEmpty.Left);
         }
         if (ex is RecycleUnavailableException) {
             // The journal is the user's: it names the file, not only the reason.

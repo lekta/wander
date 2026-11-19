@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Wander.Core.Logging;
 using Wander.Core.Persistence;
 using Wander.Core.Preview;
 
@@ -8,15 +9,16 @@ namespace Wander.Platform.Windows.Persistence;
 /// <c>model-views.json</c> in the data folder: the views of
 /// <see cref="IModelViews"/>. Read on first use, held in memory - tiles
 /// ask from pool threads - and written whole after each change, on the
-/// pool, write-then-rename; a yielding instance never writes. The oldest
-/// views go past <see cref="MaxViews"/>.
+/// pool, write-then-rename; a yielding instance never writes, a file that
+/// did not read is not written over as it is (<see cref="JsonDataFile"/>).
+/// The oldest views go past <see cref="MaxViews"/>.
 /// </summary>
 public sealed class JsonModelViewStore : IModelViews {
     private const int MaxViews = 4000;
 
     private static readonly JsonSerializerOptions _options = new() { WriteIndented = false };
 
-    private readonly string _filePath;
+    private readonly JsonDataFile _file;
     private readonly InstanceLock _owner;
     private readonly Lock _lock = new();
     private readonly Lock _writeLock = new();
@@ -29,8 +31,8 @@ public sealed class JsonModelViewStore : IModelViews {
     private long _written;
 
 
-    public JsonModelViewStore(InstanceLock owner) {
-        _filePath = AppPaths.ModelViewsFile;
+    public JsonModelViewStore(InstanceLock owner, ILogger log) {
+        _file = new JsonDataFile(AppPaths.ModelViewsFile, log, currentVersion: null);
         _owner = owner;
     }
 
@@ -67,15 +69,11 @@ public sealed class JsonModelViewStore : IModelViews {
         }
 
         _views = new Dictionary<string, Entry>(StringComparer.Ordinal);
-        try {
-            if (File.Exists(_filePath) && JsonSerializer.Deserialize<Entry[]>(File.ReadAllText(_filePath), _options) is { } entries) {
-                foreach (var entry in entries.Where(e => !string.IsNullOrEmpty(e.Path))) {
-                    _views[entry.Path!] = entry;
-                    _clock = Math.Max(_clock, entry.Stamp);
-                }
+        if (_file.Read<Entry[]>(_options) is { } entries) {
+            foreach (var entry in entries.Where(e => !string.IsNullOrEmpty(e.Path))) {
+                _views[entry.Path!] = entry;
+                _clock = Math.Max(_clock, entry.Stamp);
             }
-        } catch {
-            // A damaged file is an empty one: views are a convenience.
         }
 
         return _views;
@@ -88,14 +86,9 @@ public sealed class JsonModelViewStore : IModelViews {
                 return;
             }
 
-            try {
-                Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
-                string tmpPath = _filePath + ".tmp";
-                File.WriteAllText(tmpPath, JsonSerializer.Serialize(entries, _options));
-                File.Move(tmpPath, _filePath, overwrite: true);
+            // Best effort, like folders.json.
+            if (_file.Write(JsonSerializer.Serialize(entries, _options))) {
                 _written = newest;
-            } catch {
-                // Best effort, like folders.json.
             }
         }
     }

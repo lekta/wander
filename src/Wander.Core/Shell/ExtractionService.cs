@@ -112,9 +112,9 @@ public sealed class ExtractionService {
     /// conflict window; this is the door onto it for a caller that already
     /// has the service in hand.
     /// </summary>
-    /// <returns>The path of the copy.</returns>
-    public Task<string> ExtractToTempAsync(string source, string tempFolder, CancellationToken ct) {
-        return TempExtraction.CopyOutAsync(_ns, _fs, _log, source, tempFolder, ct);
+    /// <returns>The path of the copy, and whether an edited copy there went to the bin.</returns>
+    public Task<TempCopy> ExtractToTempAsync(string source, string tempFolder, CancellationToken ct) {
+        return TempExtraction.CopyOutAsync(_ns, _fs, _bin, _log, source, tempFolder, ct);
     }
 
 
@@ -365,10 +365,10 @@ public sealed class ExtractionService {
             unpacked++;
 
             try {
-                string copy = await TempExtraction
-                    .CopyOutAsync(_ns, _fs, _log, infos[i].Source.FullPath, ct)
+                var copy = await TempExtraction
+                    .CopyOutAsync(_ns, _fs, _bin, _log, infos[i].Source.FullPath, ct)
                     .ConfigureAwait(false);
-                infos[i] = infos[i] with { SourceReachable = true, ReadablePath = copy };
+                infos[i] = infos[i] with { SourceReachable = true, ReadablePath = copy.Path };
             } catch (OperationCanceledException) {
                 throw;
             } catch (Exception ex) {

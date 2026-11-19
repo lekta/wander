@@ -564,6 +564,12 @@
   <data name="StatusBatchCancelled" xml:space="preserve">
     <value>{0} canceled</value>
   </data>
+  <data name="StatusBatchLeftInSource" xml:space="preserve">
+    <value>{0} left at the source</value>
+  </data>
+  <data name="JournalItemLeftInSource" xml:space="preserve">
+    <value>{0} — {1} left at the source: came or changed during the copy, would not go</value>
+  </data>
   <data name="StatusBatchFailed" xml:space="preserve">
     <value>{0} failed{1}</value>
   </data>
@@ -863,6 +869,9 @@
   </data>
   <data name="ErrorLinkNotCopied" xml:space="preserve">
     <value>a link to a folder — not copied</value>
+  </data>
+  <data name="ErrorMoveBackSourceNotEmpty" xml:space="preserve">
+    <value>“{0}” holds what the move left there ({1}) — the undo does not move back into a folder that is not empty</value>
   </data>
   <data name="ActionEjectDrive" xml:space="preserve">
     <value>Eject {0}</value>
@@ -2132,6 +2141,9 @@
   </data>
   <data name="StatusArchiveTempCopy" xml:space="preserve">
     <value>Opened a temporary copy of “{0}”; changes won't go back into the archive</value>
+  </data>
+  <data name="StatusTempCopyEditedBinned" xml:space="preserve">
+    <value>the earlier copy, with its edits, is in the Recycle Bin</value>
   </data>
   <data name="StatusArchiveLocked" xml:space="preserve">
     <value>Can't extract: the archive is password-protected</value>

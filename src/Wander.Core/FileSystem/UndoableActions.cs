@@ -31,7 +31,13 @@ internal sealed record RenameAction(IFileSystem Fs, string NewPath, string OldNa
 /// <summary>
 /// Undo: move <paramref name="NewPath"/> back to <paramref name="OldPath"/>.
 /// </summary>
-internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath) : IUndoableAction {
+/// <param name="LeftInSource">
+/// A folder moved off its volume that left files at the source
+/// (<see cref="CopyReport.LeftInSource"/>): while the folder there is not
+/// empty, the way back is refused (<see cref="EnsureWayBack"/>).
+/// </param>
+internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath, IReadOnlyList<string>? LeftInSource = null)
+    : IUndoableAction {
     public string Description => $"Move '{Path.GetFileName(OldPath)}'";
     public string Verb => OperationVerbs.Move;
     public IReadOnlyList<string> PathsBeforeUndo => new[] { NewPath };
@@ -44,7 +50,23 @@ internal sealed record MoveAction(IFileSystem Fs, string OldPath, string NewPath
             : this;
     }
 
-    public void Undo() => Fs.MoveEntry(NewPath, OldPath);
+    public void Undo() {
+        EnsureWayBack();
+        Fs.MoveEntry(NewPath, OldPath);
+    }
+
+    /// <summary>
+    /// Throws <see cref="SourceNotEmptyException"/>, touching nothing, when
+    /// the move left files at the source and the folder there is not empty:
+    /// the copy back would land on top of them (audit 2026-11-18, F3).
+    /// </summary>
+    public void EnsureWayBack() {
+        if (LeftInSource is not { Count: > 0 } || !Fs.DirectoryExists(OldPath) || Fs.Enumerate(OldPath).Count == 0) {
+            return;
+        }
+
+        throw new SourceNotEmptyException(OldPath, LeftInSource.Count(Fs.FileExists));
+    }
 }
 
 /// <summary>
